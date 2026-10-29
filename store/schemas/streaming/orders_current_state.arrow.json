@@ -1,0 +1,39 @@
+{
+  "fields": [
+    {
+      "name": "order_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Olist order identifier (Primary Key)" }
+    },
+    {
+      "name": "status",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Order lifecycle status" }
+    },
+    {
+      "name": "credit_issued",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Courtesy credit amount in integer cents" }
+    },
+    {
+      "name": "updated_at",
+      "type": { "name": "timestamp", "unit": "MICROSECOND", "timezone": "UTC" },
+      "nullable": false,
+      "metadata": { "description": "Microsecond precision update timestamp" }
+    },
+    {
+      "name": "version",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Monotonic aggregate version counter" }
+    }
+  ],
+  "metadata": {
+    "table_name": "orders_current_state",
+    "partition_keys": ["status"],
+    "primary_key": ["order_id"]
+  }
+}

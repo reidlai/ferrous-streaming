@@ -1,0 +1,22 @@
+services:
+  ferrous-lakehouse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ferrous-lakehouse:latest
+    container_name: ferrous-lakehouse
+    restart: unless-stopped
+    volumes:
+      - lakehouse_data:/data/delta
+    environment:
+      - LAKEHOUSE_DATA_DIR=/data/delta
+      - LAKEHOUSE_SERVICE_ACCOUNT=svc_ferrous_lakehouse
+      - LAKEHOUSE_SERVICE_TOKEN=${LAKEHOUSE_SERVICE_TOKEN:-}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  lakehouse_data:
+    name: ferrous_lakehouse_data

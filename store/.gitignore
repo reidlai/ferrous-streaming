@@ -1,0 +1,17 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local DevSecOps environment secrets
+.env
+.env.local
+.secrets/
+*.secret
+*.token
+
+# Delta Lake Parquet data files (exclude large data files from git while keeping schemas/commits)
+data/delta/**/*.parquet
+data/delta/**/*.checkpoint.parquet
+!data/delta/**/_delta_log/*.json

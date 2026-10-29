@@ -1,0 +1,26 @@
+# ferrous-lakehouse Storage Configuration
+# Configures local filesystem and object storage paths for Delta Lake tables.
+
+[lakehouse]
+base_path = "data/delta"
+storage_type = "filesystem" # "filesystem" or "s3"
+
+[tables.orders_raw_events]
+path = "data/delta/orders_raw_events"
+partition_by = ["event_timestamp"]
+append_only = true
+
+[tables.orders_current_state]
+path = "data/delta/orders_current_state"
+partition_by = ["status"]
+append_only = false
+
+[tables.llm_benchmarks]
+path = "data/delta/llm_benchmarks"
+partition_by = ["model_id"]
+append_only = true
+
+[tables.olist_orders]
+path = "data/delta/olist_orders"
+partition_by = ["order_status"]
+append_only = false

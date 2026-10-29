@@ -28,7 +28,8 @@ flowchart TD
     subgraph Lakehouse ["ferrous-lakehouse Submodule (Delta Lake Storage Tier)"]
         RawEvents[("orders_raw_events<br/>(Append-only forensic event log)<br/>Partition: yyyy-mm-dd")]
         CurrentState[("orders_current_state<br/>(Compacted latest aggregate snapshot)<br/>Partition: status")]
-        HistoricalOlist[("Historical Olist Tables<br/>• orders • order_items • reviews<br/>• customers • payments • sellers")]
+        LLMBenchmarks[("llm_benchmarks<br/>(Native LLM evaluation telemetry)<br/>Partition: model_id")]
+        HistoricalOlist[("Historical Olist Tables<br/>• orders • order_items • reviews<br/>• customers • payments")]
         DeltaLog["ACID Transaction Log (_delta_log/)<br/>• Atomic 2PC commits<br/>• Checkpoints & Time Travel"]
     end
 
@@ -38,6 +39,7 @@ flowchart TD
 
     Kanidm -.->|Token: lakehouse:write| Arroyo
     Kanidm -.->|Token: lakehouse:read| DataFusion
+    Kanidm -.->|Token: lakehouse:manage| Lakehouse
     Arroyo -->|2PC Streaming Parquet Commits| RawEvents
     Arroyo -->|2PC Snapshot Commits| CurrentState
     DataFusion -->|Zero-Copy Arrow Scans| CurrentState
@@ -46,16 +48,72 @@ flowchart TD
 
 ---
 
-## 📊 Table Catalog & Schemas
+## 📊 Table Catalog & Data Dictionary
 
-| Table Name | Format | Writer | Reader | Description |
+| Table Name | Format | Partition Strategy | Primary Key / Index | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **`orders_raw_events`** | Delta Lake (Parquet) | Arroyo (`cg-arroyo-raw`) | Audit & Forensics | Append-only event store capturing inbound mutation commands and Iggy payloads. |
-| **`orders_current_state`** | Delta Lake (Parquet) | Arroyo (`cg-arroyo-state`) | DataFusion (<3ms) | Live materialized snapshot of active orders, current statuses, and courtesy credit totals. |
-| **`llm_benchmarks`** | Delta Lake (Parquet) | `ferrous-agent` (In-process harness) | DataFusion & Svelte Screen 5 | Native in-process LLM benchmark evaluations (TTFT, token/s, model latencies, cost, timestamp) governed under AD-22. |
-| **`olist_orders`** | Delta Lake (Parquet) | Batch Replayer / Ingestion | DataFusion | 100k Brazilian e-commerce orders for order investigation and delay radars. |
-| **`olist_reviews`** | Delta Lake (Parquet) | Batch Replayer / Ingestion | DataFusion / Qdrant | Customer review texts, timestamps, and satisfaction scores. |
-| **`olist_items_payments`** | Delta Lake (Parquet) | Batch Replayer / Ingestion | DataFusion | Freight values, payment installments, and product categories. |
+| **`orders_raw_events`** | Delta Lake (Parquet) | `event_timestamp` | `payload_id` (UUIDv7) | Append-only event store capturing inbound mutation commands and Iggy payloads. |
+| **`orders_current_state`** | Delta Lake (Parquet) | `status` | `order_id` (String PK) | Live materialized snapshot of active orders, current statuses, and courtesy credit totals. |
+| **`llm_benchmarks`** | Delta Lake (Parquet) | `model_id` | `run_id` (UUIDv7) | Native in-process LLM benchmark evaluations (TTFT, token/s, model latencies, cost, timestamp) governed under AD-22. |
+| **`olist_orders`** | Delta Lake (Parquet) | `order_status` | `order_id` | 100k Brazilian e-commerce orders for order investigation and delay radars. |
+| **`olist_order_items`** | Delta Lake (Parquet) | Unpartitioned | `order_id`, `order_item_id` | Line item breakdown, prices, seller IDs, and shipping limit dates. |
+| **`olist_reviews`** | Delta Lake (Parquet) | Unpartitioned | `review_id` | Customer review scores, review titles, and satisfaction comments. |
+| **`olist_customers`** | Delta Lake (Parquet) | Unpartitioned | `customer_id` | Customer geographic prefixes and state locations (direct PII purged). |
+| **`olist_payments`** | Delta Lake (Parquet) | Unpartitioned | `order_id`, `payment_sequential` | Payment methods, installments, and payment values. |
+
+---
+
+## 🔒 DevSecOps Secret Zero & Environment Configuration
+
+In strict adherence to the **DevSecOps Secret Zero Policy**, no plaintext credentials or bearer tokens are stored in Git.
+
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Populate `.env` with your active `svc_ferrous_lakehouse` service account token:
+   ```env
+   LAKEHOUSE_SERVICE_ACCOUNT=svc_ferrous_lakehouse
+   LAKEHOUSE_SERVICE_TOKEN=your_bearer_token_here
+   ```
+3. Storage maintenance scripts automatically load credentials from `.env` and deny unauthenticated attempts (HTTP 401).
+
+---
+
+## ⚡ Quickstart: Local Verification (<3 Minutes)
+
+Run the automated quickstart verification suite on your operating system:
+
+### Windows (PowerShell)
+```powershell
+# Execute 1-command verification suite
+.\scripts\quickstart.ps1
+```
+
+### Linux / macOS (Bash)
+```bash
+# Make executable and run
+chmod +x ./scripts/*.sh
+./scripts/quickstart.sh
+```
+
+### Individual Step Commands
+
+#### Step 1: Validate Schemas and Audit for PII (NFR-8)
+- **PowerShell**: `.\scripts\validate-schemas.ps1`
+- **Bash**: `./scripts/validate-schemas.sh`
+
+#### Step 2: Initialize Delta Lake Storage & ACID Transaction Logs (AD-17)
+- **PowerShell**: `.\scripts\init-tables.ps1`
+- **Bash**: `./scripts/init-tables.sh`
+
+#### Step 3: Run Authenticated Compaction (OPTIMIZE)
+- **PowerShell**: `.\scripts\optimize.ps1 -Table orders_current_state -TargetMB 128`
+- **Bash**: `./scripts/optimize.sh orders_current_state 128`
+
+#### Step 4: Run Retention Pruning (VACUUM)
+- **PowerShell**: `.\scripts\vacuum.ps1 -Table orders_current_state -RetentionHours 168`
+- **Bash**: `./scripts/vacuum.sh orders_current_state 168`
 
 ---
 
@@ -64,33 +122,33 @@ flowchart TD
 ```text
 ferrous-lakehouse/
 ├── .github/workflows/
-│   └── devsecops-infra-ci.yml   # Tier 2 DevSecOps CI (hadolint, trivy, schema lint)
-├── .pre-commit-config.yaml      # Pre-commit hooks (sqlfluff, gitleaks)
+│   └── devsecops-infra-ci.yml   # Tier 2 DevSecOps CI (hadolint, trivy, schema tests)
+├── .pre-commit-config.yaml      # Shift-left hooks (gitleaks, schema audit, yaml/toml)
+├── .env.example                 # Masked template for Secret Zero environment variables
 ├── schemas/                     # Delta Lake Table Schemas & Arrow DDL
 │   ├── streaming/               # Streaming runtime tables
-│   │   ├── orders_raw_events.sql
-│   │   └── orders_current_state.sql
+│   │   ├── orders_raw_events.sql / .arrow.json
+│   │   └── orders_current_state.sql / .arrow.json
 │   ├── benchmarks/              # LLM evaluation runtime tables (AD-22)
-│   │   └── llm_benchmarks.sql
+│   │   └── llm_benchmarks.sql / .arrow.json
 │   └── historical/              # Historical Olist benchmark tables
 │       ├── olist_orders.sql
 │       ├── olist_order_items.sql
 │       ├── olist_reviews.sql
-│       └── olist_customers.sql
+│       ├── olist_customers.sql
+│       └── olist_payments.sql
 ├── config/                      # Delta Lake storage & retention configurations
 │   ├── storage.toml             # Storage paths (local /data/delta or MinIO S3)
 │   └── retention.toml           # VACUUM (7-day retention) and OPTIMIZE schedules
 ├── scripts/
-│   ├── init-tables.sh           # Initializes Delta Lake directories and _delta_log
-│   └── optimize-vacuum.sh       # Runs bin-packing compaction and log cleanup
-├── Dockerfile                   # Lightweight maintenance container (maintenance runner)
+│   ├── quickstart.sh / .ps1     # 1-command verification suite (<3m)
+│   ├── validate-schemas.py      # Schema syntax and PII audit runner
+│   ├── init_tables.py           # Delta Lake ACID log and directory initializer
+│   ├── optimize.py              # Authenticated compaction (OPTIMIZE)
+│   └── vacuum.py                # Authenticated retention pruning (VACUUM)
+├── tests/                       # Unit test suite for storage and maintenance
+│   ├── test_storage_init.py
+│   └── test_maintenance.py
+├── Dockerfile                   # Hardened storage initializer & maintenance container
 └── README.md                    # Submodule specification & data dictionary
 ```
-
----
-
-## 🛡️ DevSecOps & Quality Assurance (Tier 2 Infrastructure)
-
-- **SQL Schema Linting:** Validated via `sqlfluff` in pre-commit hooks.
-- **Container Hardening:** Compaction and maintenance runner builds from minimal distroless base images, verified with `trivy` (zero HIGH/CRITICAL CVEs).
-- **Service Account Access:** Access is authenticated through Kanidm M2M Service Accounts (`svc_ferrous_lakehouse`, `svc_ferrous_streaming`, `svc_ferrous_query`).

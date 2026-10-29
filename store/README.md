@@ -1,8 +1,8 @@
 # ferrous-lakehouse
 
-[← Back to FerrousCX Root Architecture](https://github.com/reidlai/ferrouscx-bmad)
+[← Back to FerrousCX Root Architecture](https://github.com/reidlai/ferrous-cx)
 
-[![Component Type: Delta Lake Storage Tier](https://img.shields.io/badge/component-Delta%20Lake%20Storage-blue.svg)](https://github.com/reidlai/ferrouscx-bmad)
+[![Component Type: Delta Lake Storage Tier](https://img.shields.io/badge/component-Delta%20Lake%20Storage-blue.svg)](https://github.com/reidlai/ferrous-cx)
 [![Standard: Delta Lake 0.20](https://img.shields.io/badge/standard-Delta%20Lake%20(delta--rs)-orange.svg)](https://delta.io/)
 [![DevSecOps CI: Tier 2](https://img.shields.io/badge/DevSecOps%20CI-Tier%202%20Passing-brightgreen.svg)](.github/workflows/devsecops-infra-ci.yml)
 [![Pre-Commit Enabled](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](.pre-commit-config.yaml)

@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1.4
+# Hardened Apache Iggy Broker Container for FerrousCX
+# Adheres strictly to Tier 2 DevSecOps standards (AD-13, NFR-13)
+
+FROM apache/iggy:latest AS upstream
+
+FROM alpine:3.20
+
+LABEL org.opencontainers.image.title="ferrous-streaming" \
+      org.opencontainers.image.description="Hardened Apache Iggy message broker container for FerrousCX" \
+      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.vendor="FerrousCX" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# Install minimal runtime dependencies (pure Rust core)
+RUN apk add --no-cache ca-certificates libgcc
+
+# Create unprivileged non-root user and group (UID/GID 10001)
+RUN addgroup -g 10001 -S iggy && \
+    adduser -u 10001 -S iggy -G iggy -s /sbin/nologin && \
+    mkdir -p /data/iggy /etc/iggy /usr/local/bin && \
+    chown -R 10001:10001 /data/iggy /etc/iggy
+
+WORKDIR /data/iggy
+
+# Copy binary from upstream container stage
+COPY --from=upstream /usr/local/bin/iggy-server /usr/local/bin/iggy-server
+
+# Copy configuration
+COPY --chown=10001:10001 config/iggy.toml /etc/iggy/iggy.toml
+
+# Switch to rootless runtime user
+USER 10001:10001
+
+# Volumes for persistent WAL storage
+VOLUME ["/data/iggy"]
+
+# Expose native TCP (8090), HTTP management (3000), and Kafka wire gateway (9092)
+EXPOSE 8090 3000 9092
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+  CMD ["/usr/local/bin/iggy-server", "--version"]
+
+ENTRYPOINT ["/usr/local/bin/iggy-server"]
+CMD ["--config-path", "/etc/iggy/iggy.toml"]

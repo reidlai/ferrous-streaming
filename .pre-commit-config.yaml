@@ -1,0 +1,26 @@
+# Pre-commit configuration for ferrous-streaming
+# Enforces Tier 2 DevSecOps shift-left standards, Gitleaks, and broker configuration validation.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: test-broker-scaffolding
+        name: Validate Apache Iggy Broker Scaffolding
+        entry: python tests/test_broker_scaffolding.py
+        language: system
+        pass_filenames: false
+        always_run: true

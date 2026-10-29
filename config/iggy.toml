@@ -1,0 +1,20 @@
+# Apache Iggy Message Broker Configuration for FerrousCX
+# Submodule: ferrous-streaming
+# Provides native TCP on port 8090, HTTP management on port 3000, and Kafka protocol gateway on port 9092.
+
+path = "/data/iggy"
+
+[node]
+advertised_address = "localhost"
+
+[tcp]
+enabled = true
+address = "0.0.0.0:8090"
+
+[http]
+enabled = true
+address = "0.0.0.0:3000"
+
+[kafka]
+enabled = true
+address = "0.0.0.0:9092"

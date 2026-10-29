@@ -1,0 +1,26 @@
+# DevSecOps Secret Zero - Environment & Credentials
+.env
+.env.*
+!.env.example
+*.secret
+*.key
+*.pem
+
+# Persistent Storage & WAL Data
+data/
+data/iggy/
+./data/iggy/*
+
+# Build and Container Artifacts
+target/
+*.log
+*.pid
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# OS & Editor Metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

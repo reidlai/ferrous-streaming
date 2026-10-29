@@ -157,6 +157,42 @@ chmod +x ./scripts/*.sh
 
 ---
 
+## 🐳 Containerized Orchestration (Docker Compose)
+
+The `ferrous-lakehouse` service runs as a hardened rootless container (UID 10001) that automatically scaffolds Delta tables on boot and manages recurring OPTIMIZE and VACUUM maintenance cycles.
+
+### Step 1: Launch the Lakehouse Container Service
+
+#### Windows (PowerShell) & Linux / macOS (Bash)
+```bash
+docker compose up -d
+```
+
+### Step 2: Verify Container Health & Status
+Check that the container reports `healthy`:
+```bash
+docker ps --filter "name=ferrous-lakehouse"
+```
+
+Expected output:
+```text
+CONTAINER ID   IMAGE                      STATUS                    NAMES
+2b684d494610   ferrous-lakehouse:latest   Up 2 minutes (healthy)   ferrous-lakehouse
+```
+
+### Step 3: Inspect Lifecycle Logs
+Monitor the automated initialization and recurring maintenance loops:
+```bash
+docker logs -f ferrous-lakehouse
+```
+
+### Step 4: Stop the Lakehouse Service
+```bash
+docker compose down
+```
+
+---
+
 ## 📁 Repository Structure
 
 ```text
@@ -165,6 +201,9 @@ ferrous-lakehouse/
 │   └── devsecops-infra-ci.yml   # Tier 2 DevSecOps CI (hadolint, trivy, schema tests)
 ├── .pre-commit-config.yaml      # Shift-left hooks (gitleaks, schema audit, yaml/toml)
 ├── .env.example                 # Masked template for Secret Zero environment variables
+├── docker-compose.yml           # Local Compose service definition
+├── Dockerfile                   # Hardened storage initializer & maintenance container (UID 10001)
+├── entrypoint.py                # Container lifecycle entrypoint (--init, --maintain, --daemon)
 ├── schemas/                     # Delta Lake Table Schemas & Arrow DDL
 │   ├── streaming/               # Streaming runtime tables
 │   │   ├── orders_raw_events.sql / .arrow.json
@@ -189,6 +228,5 @@ ferrous-lakehouse/
 ├── tests/                       # Unit test suite for storage and maintenance
 │   ├── test_storage_init.py
 │   └── test_maintenance.py
-├── Dockerfile                   # Hardened storage initializer & maintenance container
 └── README.md                    # Submodule specification & data dictionary
 ```

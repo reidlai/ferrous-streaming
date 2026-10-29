@@ -1,0 +1,2 @@
+{"add": {"path": "part-0c354daa-c000.snappy.parquet", "partitionValues": {}, "size": 134217728, "modificationTime": 1793267946489, "dataChange": false, "stats": "{\"numRecords\": 10000}"}}
+{"commitInfo": {"timestamp": 1793267946489, "operation": "OPTIMIZE", "operationParameters": {"targetSize": 134217728, "predicate": "[]"}, "metrics": {"numFilesAdded": 1, "numFilesRemoved": 0, "targetSizeMB": 128}, "engineInfo": "ferrous-lakehouse-maintenance/1.0.0"}}

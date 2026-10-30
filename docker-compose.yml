@@ -22,6 +22,9 @@ services:
       - IGGY_CONFIG_PATH=/etc/iggy/iggy.toml
       - IGGY_NODE_ADVERTISED_ADDRESS=localhost
       - OTEL_SDK_DISABLED=true
+      - IGGY_HTTP_JWT_ENCODING_SECRET=${IGGY_HTTP_JWT_ENCODING_SECRET:-}
+      - IGGY_HTTP_JWT_DECODING_SECRET=${IGGY_HTTP_JWT_DECODING_SECRET:-}
+      - STREAMING_SERVICE_ACCOUNT=${STREAMING_SERVICE_ACCOUNT:-svc_ferrous_streaming}
     healthcheck:
       test: ["CMD", "/usr/local/bin/iggy-server", "--version"]
       interval: 10s

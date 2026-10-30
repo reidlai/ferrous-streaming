@@ -15,5 +15,18 @@ address = "0.0.0.0:8090"
 enabled = true
 address = "0.0.0.0:3000"
 
+[http.jwt]
+algorithm = "HS256"
+issuer = "iggy.apache.org"
+audience = "iggy.apache.org"
+valid_issuers = ["iggy.apache.org"]
+valid_audiences = ["iggy.apache.org"]
+access_token_expiry = "1h"
+clock_skew = "5s"
+not_before = "0s"
+use_base64_secret = false
+encoding_secret = ""
+decoding_secret = ""
+
 [memory_pool]
 enabled = false

@@ -18,10 +18,15 @@ This submodule packages and runs the streaming engine and broker runtime, orches
 
 ```mermaid
 %%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#2b2b2b',
+    'edgeLabelBackground': '#1e1e1e'
+  },
   'flowchart': {
-    'subGraphTitleMargin': { 'top': 15, 'bottom': 35 },
-    'nodeSpacing': 40,
-    'rankSpacing': 50
+    'subGraphTitleMargin': { 'top': 12, 'bottom': 24 },
+    'nodeSpacing': 45,
+    'rankSpacing': 55
   }
 }}%%
 flowchart LR
@@ -32,32 +37,43 @@ flowchart LR
     subgraph Streaming_Submodule ["ferrous-streaming Submodule"]
         Iggy["Apache Iggy Broker<br/>• Port 9092 (Kafka Wire Gateway)<br/>• Port 8090 (Native TCP)"]
         
-        subgraph Arroyo_Engine ["Arroyo Stream Processing Engine"]
+        subgraph Arroyo_Engine ["Arroyo Processing Engine"]
             Migrations["Schema Migrations<br/>(v1 -> v2 DDL Evolution)"]
             SQLPipeline["Arroyo SQL Streaming Jobs<br/>(Stream-to-Parquet Batcher)"]
         end
     end
 
-    subgraph Storage ["Multi-Target Delta Lake Sinks (2PC Parquet)"]
+    subgraph Storage ["Delta Lake 2PC Parquet Sinks"]
         DeltaRaw[("Delta Lake: orders_raw_events<br/>(Append-only Audit Log)")]
         DeltaState[("Delta Lake: orders_current_state<br/>(Compacted State Projection)")]
     end
 
-    Replayer -->|Kafka Protocol: Port 9092| Iggy
-    Iggy -->|Topic: orders/intake| SQLPipeline
+    subgraph Storage_Targets ["Storage Targets"]
+        Local["Local Filesystem (file://)"]
+        MinIO["MinIO S3 (s3://)"]
+        AWSS3["AWS S3 (s3://)"]
+        GCS["GCP Cloud Storage (gs://)"]
+    end
+
+    subgraph Downstream_Consumption ["Downstream Analytical Engine"]
+        DeltaSink["DeltaSink<br/>(Parquet Store)"]
+        DataFusion["Apache DataFusion<br/>(Vectorized Engine)"]
+        ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
+    end
+
+    Replayer -->|Kafka: Port 9092| Iggy
+    Iggy -->|orders/intake| SQLPipeline
     Migrations --> SQLPipeline
-    SQLPipeline -->|2PC Append Micro-Batches| DeltaRaw
+    SQLPipeline -->|2PC Micro-Batches| DeltaRaw
     SQLPipeline -->|2PC State Projections| DeltaState
 
-    DeltaSink -.-> Local["Local Filesystem (file://)"]
-    DeltaSink -.-> MinIO["MinIO S3 (s3://)"]
-    DeltaSink -.-> AWSS3["AWS S3 (s3://)"]
-    DeltaSink -.-> GCS["GCP Cloud Storage (gs://)"]
+    DeltaSink -.-> Local
+    DeltaSink -.-> MinIO
+    DeltaSink -.-> AWSS3
+    DeltaSink -.-> GCS
 
-    subgraph Downstream_Consumption ["Downstream Query (Historical Only)"]
-        DeltaSink -->|Vectorized SQL Scan<br/>&lt;3ms| DataFusion["Apache DataFusion<br/>(Analytical Engine)"]
-        DataFusion -->|Historical Analytics| ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
-    end
+    DeltaSink -->|SQL Scan &lt;3ms| DataFusion
+    DataFusion -->|Historical Analytics| ApiService
 ```
 
 > **Note on Pipeline Boundaries:** The **FerrousCX API Service (Rust / Axum)** connects to **Apache DataFusion** to query this Delta Lake Arroyo storage **strictly for historical streaming datasets** (e.g. Olist historical transactions, reviews, delivery logs). Live transactional commands and state changes bypass this pipeline and are handled strictly by the CQRS-ES pattern in **`ferrous-cqrses`**.

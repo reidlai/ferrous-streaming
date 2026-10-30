@@ -46,18 +46,27 @@ class SubmoduleStandardsUnitTests(unittest.TestCase):
         self.assertIn("test-raw-event-archiver", content)
         self.assertIn("test-state-consolidator", content)
 
-    def test_03_tier_2_devsecops_ci_workflow(self):
-        """Verifies GitHub Actions workflow configures Gitleaks, Hadolint, and Trivy scans."""
-        ci_workflow = REPO_ROOT / ".github" / "workflows" / "devsecops-infra-ci.yml"
-        self.assertTrue(ci_workflow.is_file(), "devsecops-infra-ci.yml must exist")
+    def test_03_tier_2_devsecops_build_and_scan(self):
+        """Verifies local build-and-scan scripts configure Docker builds and Trivy scans."""
+        sh_script = REPO_ROOT / "scripts" / "build-and-scan.sh"
+        ps1_script = REPO_ROOT / "scripts" / "build-and-scan.ps1"
 
-        content = ci_workflow.read_text(encoding="utf-8")
-        self.assertIn("gitleaks/gitleaks-action", content)
-        self.assertIn("hadolint/hadolint-action", content)
-        self.assertIn("aquasecurity/trivy-action", content)
-        self.assertIn("Dockerfile.iggy", content)
-        self.assertIn("Dockerfile.arroyo", content)
-        self.assertIn("python -m unittest discover tests", content)
+        self.assertTrue(sh_script.is_file(), "build-and-scan.sh must exist")
+        self.assertTrue(ps1_script.is_file(), "build-and-scan.ps1 must exist")
+
+        sh_content = sh_script.read_text(encoding="utf-8")
+        self.assertIn("Dockerfile.iggy", sh_content)
+        self.assertIn("Dockerfile.arroyo", sh_content)
+        self.assertIn("ferrous-streaming-iggy", sh_content)
+        self.assertIn("ferrous-streaming-arroyo", sh_content)
+        self.assertIn("trivy", sh_content)
+        self.assertIn("HIGH,CRITICAL", sh_content)
+
+        ps1_content = ps1_script.read_text(encoding="utf-8")
+        self.assertIn("Dockerfile.iggy", ps1_content)
+        self.assertIn("Dockerfile.arroyo", ps1_content)
+        self.assertIn("trivy", ps1_content)
+        self.assertIn("HIGH,CRITICAL", ps1_content)
 
 
 if __name__ == "__main__":

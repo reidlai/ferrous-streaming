@@ -200,13 +200,19 @@ Deploy both Arroyo streaming pipelines (Pipeline 1: `raw_event_archiver` connect
 This infrastructure submodule adheres strictly to the **Tier 2 DevSecOps Standards**:
 
 * **Local Pre-Commit Guardrails (`.pre-commit-config.yaml`):**
-  - Dockerfile linting via `hadolint` (enforcing non-root execution, explicit tag pinning, no `:latest`).
-  - Shell script linting via `shellcheck`.
   - Secret scanning via `gitleaks` to block committed credentials.
-* **Tier 2 DevSecOps CI Pipeline ([`devsecops-infra-ci.yml`](https://github.com/reidlai/ferrous-cx/blob/main/.github/workflows/devsecops-infra-ci.yml)):**
-  - **Base Image SCA:** **Trivy** scanning base images (Debian/Alpine/Rust) for OS-level CVEs, failing on unpatched **HIGH** or **CRITICAL** vulnerabilities.
-  - **Configuration SAST:** **Hadolint** and **Trivy config** inspecting Dockerfiles and compose files.
-  - **Smoke Verification:** Automated `docker build` validation on every pull request.
+  - File formatting and syntax checks (`check-yaml`, `check-toml`, trailing whitespace, end-of-file).
+  - Automated local execution of all 9 unit and integration test suites.
+* **Local Container Build & Trivy Vulnerability Scanning (`build-and-scan`):**
+  - **Base Image SCA:** **Trivy** scanning base images (Alpine/Debian) for OS-level CVEs, failing on unpatched **HIGH** or **CRITICAL** vulnerabilities.
+  - Zero cloud CI minute consumption for free GitHub accounts.
+  ```bash
+  # POSIX Bash
+  ./scripts/build-and-scan.sh
+
+  # PowerShell
+  .\scripts\build-and-scan.ps1
+  ```
 
 ---
 

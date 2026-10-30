@@ -36,3 +36,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-consumer-groups
+        name: Validate Zero-Copy Multi-Consumer Group Fan-Out
+        entry: python tests/test_consumer_groups.py
+        language: system
+        pass_filenames: false
+        always_run: true

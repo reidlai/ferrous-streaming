@@ -4,7 +4,7 @@
 
 [![Component Type: Streaming & Lakehouse Ingestion](https://img.shields.io/badge/component-streaming%20%26%20lakehouse-blue.svg)](https://github.com/reidlai/ferrous-cx)
 [![License: MIT/Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-green.svg)](LICENSE)
-[![DevSecOps CI: Tier 2](https://img.shields.io/badge/DevSecOps%20CI-Tier%202%20Passing-brightgreen.svg)](.github/workflows/devsecops-infra-ci.yml)
+[![DevSecOps CI: Tier 2](https://img.shields.io/badge/DevSecOps%20CI-Tier%202%20Passing-brightgreen.svg)](https://github.com/reidlai/ferrous-cx/blob/main/.github/workflows/devsecops-infra-ci.yml)
 [![Container Security: Trivy Passing](https://img.shields.io/badge/Trivy-0%20High%2FCritical-brightgreen.svg)](#container-security--devsecops)
 [![Target: Apache Iggy + Arroyo](https://img.shields.io/badge/stack-Iggy%20%2B%20Arroyo%20%2B%20Delta%20Lake-orange.svg)](#system-architecture)
 
@@ -149,7 +149,19 @@ Idempotently initialize stream `orders` and partitioned topics (`intake` and `co
 .\scripts\provision-topics.ps1
 ```
 
-### 3. Run Schema Migrations
+### 3. Provision Zero-Copy Consumer Groups
+
+Idempotently provision consumer groups for decoupled stream processing and command consumption (`cg-arroyo-raw`, `cg-cmd-handler`, and `cg-arroyo-state`):
+
+```bash
+# POSIX Bash
+./scripts/provision-consumer-groups.sh
+
+# PowerShell
+.\scripts\provision-consumer-groups.ps1
+```
+
+### 4. Run Schema Migrations
 
 ```bash
 # Apply Arroyo SQL schema migrations to create streaming pipelines
@@ -166,7 +178,7 @@ This infrastructure submodule adheres strictly to the **Tier 2 DevSecOps Standar
   - Dockerfile linting via `hadolint` (enforcing non-root execution, explicit tag pinning, no `:latest`).
   - Shell script linting via `shellcheck`.
   - Secret scanning via `gitleaks` to block committed credentials.
-* **Tier 2 DevSecOps CI Pipeline (`.github/workflows/devsecops-infra-ci.yml`):**
+* **Tier 2 DevSecOps CI Pipeline ([`devsecops-infra-ci.yml`](https://github.com/reidlai/ferrous-cx/blob/main/.github/workflows/devsecops-infra-ci.yml)):**
   - **Base Image SCA:** **Trivy** scanning base images (Debian/Alpine/Rust) for OS-level CVEs, failing on unpatched **HIGH** or **CRITICAL** vulnerabilities.
   - **Configuration SAST:** **Hadolint** and **Trivy config** inspecting Dockerfiles and compose files.
   - **Smoke Verification:** Automated `docker build` validation on every pull request.

@@ -49,11 +49,11 @@ flowchart LR
 
     subgraph Downstream_Consumption ["Downstream Query (Historical Only)"]
         DeltaSink -->|Vectorized SQL Scan &lt;3ms| DataFusion["Apache DataFusion<br/>(Analytical Engine)"]
-        DataFusion -->|Historical Analytics| Gateway["FerrousCX Gateway<br/>(Rust / Axum)"]
+        DataFusion -->|Historical Analytics| ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
     end
 ```
 
-> **Note on Pipeline Boundaries:** The **FerrousCX Gateway (Rust / Axum)** connects to **Apache DataFusion** to query this Delta Lake Arroyo storage **strictly for historical streaming datasets** (e.g. Olist historical transactions, reviews, delivery logs). Live transactional commands and state changes bypass this pipeline and are handled strictly by the CQRS-ES pattern in **`ferrous-cqrses`**.
+> **Note on Pipeline Boundaries:** The **FerrousCX API Service (Rust / Axum)** connects to **Apache DataFusion** to query this Delta Lake Arroyo storage **strictly for historical streaming datasets** (e.g. Olist historical transactions, reviews, delivery logs). Live transactional commands and state changes bypass this pipeline and are handled strictly by the CQRS-ES pattern in **`ferrous-cqrses`**.
 
 ### Communication Protocols & Ports
 

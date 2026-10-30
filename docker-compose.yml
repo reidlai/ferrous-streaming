@@ -20,10 +20,7 @@ services:
       - ./data/iggy:/data/iggy
     environment:
       - IGGY_CONFIG_PATH=/etc/iggy/iggy.toml
-      - IGGY_TCP_PORT=8090
-      - IGGY_HTTP_PORT=3000
-      - IGGY_KAFKA_PORT=9092
-      - IGGY_STORAGE_PATH=/data/iggy
+      - IGGY_NODE_ADVERTISED_ADDRESS=localhost
       - OTEL_SDK_DISABLED=true
     healthcheck:
       test: ["CMD", "/usr/local/bin/iggy-server", "--version"]
@@ -39,4 +36,4 @@ services:
     deploy:
       resources:
         limits:
-          memory: 50M
+          memory: 256M

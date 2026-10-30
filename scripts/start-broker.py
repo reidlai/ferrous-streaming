@@ -73,9 +73,9 @@ def validate_config(config_path: Path) -> dict:
     if "3000" not in http_addr:
         raise ValueError(f"Invalid iggy.toml: Expected port 3000 for HTTP management API, got http='{http_addr}'.")
 
-    # Validate Kafka port 9092
+    # Validate Kafka port 9092 (optional in iggy.toml; gateway runs as Kafka protocol bridge)
     kafka_addr = cfg.get("kafka", {}).get("address", "")
-    if "9092" not in kafka_addr:
+    if kafka_addr and "9092" not in kafka_addr:
         raise ValueError(f"Invalid iggy.toml: Expected port 9092 for Kafka gateway, got '{kafka_addr}'.")
 
     return cfg

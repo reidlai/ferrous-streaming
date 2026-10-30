@@ -1,0 +1,74 @@
+# Pre-commit configuration for ferrous-streaming
+# Enforces Tier 2 DevSecOps shift-left standards, Gitleaks, and broker configuration validation.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: test-broker-scaffolding
+        name: Validate Apache Iggy Broker Scaffolding
+        entry: python tests/test_broker_scaffolding.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-broker-security
+        name: Validate Apache Iggy Broker Security & JWT
+        entry: python tests/test_broker_security.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-topic-partitioning
+        name: Validate Topic Partitioning & Immediate Durability
+        entry: python tests/test_topic_partitioning.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-consumer-groups
+        name: Validate Zero-Copy Multi-Consumer Group Fan-Out
+        entry: python tests/test_consumer_groups.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-arroyo-service
+        name: Validate Arroyo Stream Processor Deployment & Broker Ingestion
+        entry: python tests/test_arroyo_service.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-raw-event-archiver
+        name: Validate Raw Event Archiving Pipeline & Delta Lake 2PC Sink
+        entry: python tests/test_raw_event_archiver.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-state-consolidator
+        name: Validate Consolidated State Materialization Pipeline & Delta Sink
+        entry: python tests/test_state_consolidator.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-submodule-standards
+        name: Validate Submodule Documentation & Tier 2 Security CI Gate
+        entry: python tests/test_submodule_standards.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-container-builds
+        name: Validate Multi-Service Docker Image Builds & Security Profiles
+        entry: python tests/test_container_builds.py
+        language: system
+        pass_filenames: false
+        always_run: true

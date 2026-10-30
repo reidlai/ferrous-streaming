@@ -1,0 +1,84 @@
+services:
+  iggy-broker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ferrous-streaming-iggy:latest
+    container_name: ferrous-iggy-broker
+    restart: unless-stopped
+    command: ["--with-default-root-credentials"]
+    user: "10001:10001"
+    ports:
+      - "8090:8090"
+      - "3000:3000"
+      - "9092:9092"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./config/iggy.toml:/etc/iggy/iggy.toml:ro
+      - ./data/iggy:/data/iggy
+    environment:
+      - IGGY_CONFIG_PATH=/etc/iggy/iggy.toml
+      - IGGY_NODE_ADVERTISED_ADDRESS=localhost
+      - OTEL_SDK_DISABLED=true
+      - IGGY_HTTP_JWT_ENCODING_SECRET=${IGGY_HTTP_JWT_ENCODING_SECRET:-}
+      - IGGY_HTTP_JWT_DECODING_SECRET=${IGGY_HTTP_JWT_DECODING_SECRET:-}
+      - STREAMING_SERVICE_ACCOUNT=${STREAMING_SERVICE_ACCOUNT:-svc_ferrous_streaming}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/iggy-server", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  arroyo:
+    build:
+      context: .
+      dockerfile: Dockerfile.arroyo
+    image: ferrous-streaming-arroyo:latest
+    container_name: ferrous-arroyo-streaming
+    restart: unless-stopped
+    user: "10001:10001"
+    ports:
+      - "5115:5115"
+    depends_on:
+      iggy-broker:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./config/arroyo.toml:/etc/arroyo/arroyo.toml:ro
+      - ./data/arroyo:/data/arroyo
+      - ./data/delta:/data/delta
+    environment:
+      - ARROYO_API_PORT=5115
+      - ARROYO__API__BIND_ADDRESS=0.0.0.0:5115
+      - ARROYO__CHECKPOINT_URL=file:///data/arroyo/checkpoints
+      - IGGY_KAFKA_PORT=9092
+      - IGGY_NODE_ADVERTISED_ADDRESS=iggy-broker
+      - STREAMING_SERVICE_ACCOUNT=${STREAMING_SERVICE_ACCOUNT:-svc_ferrous_streaming}
+      - OTEL_SDK_DISABLED=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5115/api/v1/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512M

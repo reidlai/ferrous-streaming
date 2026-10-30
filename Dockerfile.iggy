@@ -41,5 +41,7 @@ EXPOSE 8090 3000 9092
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
   CMD ["/usr/local/bin/iggy-server", "--version"]
 
+ENV IGGY_CONFIG_PATH=/etc/iggy/iggy.toml
+
 ENTRYPOINT ["/usr/local/bin/iggy-server"]
-CMD ["--config-path", "/etc/iggy/iggy.toml"]
+CMD ["--with-default-root-credentials"]

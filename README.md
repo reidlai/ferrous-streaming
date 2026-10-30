@@ -19,32 +19,32 @@ This submodule packages and runs the streaming engine and broker runtime, orches
 ```mermaid
 %%{init: {
   'flowchart': {
-    'subGraphTitleMargin': { 'top': 20, 'bottom': 20 },
-    'nodeSpacing': 35,
-    'rankSpacing': 45
+    'subGraphTitleMargin': { 'top': 15, 'bottom': 35 },
+    'nodeSpacing': 40,
+    'rankSpacing': 50
   }
 }}%%
 flowchart LR
-    subgraph Ingestion_Source ["External Traffic Replayer<br/>&nbsp;"]
+    subgraph Ingestion_Source ["External Traffic Replayer"]
         Replayer["stream-replay-rs<br/>(Olist Dataset Replay)"]
     end
 
-    subgraph Streaming_Submodule ["ferrous-streaming Submodule<br/>&nbsp;"]
+    subgraph Streaming_Submodule ["ferrous-streaming Submodule"]
         Iggy["Apache Iggy Broker<br/>• Port 9092 (Kafka Wire Gateway)<br/>• Port 8090 (Native TCP)"]
         
-        subgraph Arroyo_Engine ["Arroyo Stream Processing Engine<br/>&nbsp;"]
+        subgraph Arroyo_Engine ["Arroyo Stream Processing Engine"]
             Migrations["Schema Migrations<br/>(v1 -> v2 DDL Evolution)"]
             SQLPipeline["Arroyo SQL Streaming Jobs<br/>(Stream-to-Parquet Batcher)"]
         end
     end
 
-    subgraph Storage ["Multi-Target Delta Lake Sinks (2PC Parquet)<br/>&nbsp;"]
+    subgraph Storage ["Multi-Target Delta Lake Sinks (2PC Parquet)"]
         DeltaRaw[("Delta Lake: orders_raw_events<br/>(Append-only Audit Log)")]
         DeltaState[("Delta Lake: orders_current_state<br/>(Compacted State Projection)")]
     end
 
     Replayer -->|Kafka Protocol: Port 9092| Iggy
-    Iggy -->|Topic: orders/intake &<br/>orders/consolidated| SQLPipeline
+    Iggy -->|Topic: orders/intake| SQLPipeline
     Migrations --> SQLPipeline
     SQLPipeline -->|2PC Append Micro-Batches| DeltaRaw
     SQLPipeline -->|2PC State Projections| DeltaState
@@ -54,7 +54,7 @@ flowchart LR
     DeltaSink -.-> AWSS3["AWS S3 (s3://)"]
     DeltaSink -.-> GCS["GCP Cloud Storage (gs://)"]
 
-    subgraph Downstream_Consumption ["Downstream Query (Historical Only)<br/>&nbsp;"]
+    subgraph Downstream_Consumption ["Downstream Query (Historical Only)"]
         DeltaSink -->|Vectorized SQL Scan<br/>&lt;3ms| DataFusion["Apache DataFusion<br/>(Analytical Engine)"]
         DataFusion -->|Historical Analytics| ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
     end

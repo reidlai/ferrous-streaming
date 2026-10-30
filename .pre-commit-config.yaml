@@ -48,3 +48,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-raw-event-archiver
+        name: Validate Raw Event Archiving Pipeline & Delta Lake 2PC Sink
+        entry: python tests/test_raw_event_archiver.py
+        language: system
+        pass_filenames: false
+        always_run: true

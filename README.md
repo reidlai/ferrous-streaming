@@ -173,11 +173,22 @@ Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated
 .\scripts\provision-arroyo.ps1
 ```
 
-### 5. Run Schema Migrations
+### 5. Run Schema Migrations & Deploy Streaming Pipelines
+
+Deploy the Delta Lake 2PC raw archiving streaming pipeline (`raw_event_archiver`) connecting to stream `orders`, topic `intake`, via consumer group `cg-arroyo-raw`:
 
 ```bash
-# Apply Arroyo SQL schema migrations to create streaming pipelines
+# POSIX Bash
 ./scripts/run-migrations.sh
+
+# Or deploy pipeline specifically:
+./scripts/deploy-pipeline-raw-archiver.sh
+
+# PowerShell
+.\scripts\run-migrations.ps1
+
+# Or deploy pipeline specifically:
+.\scripts\deploy-pipeline-raw-archiver.ps1
 ```
 
 ---

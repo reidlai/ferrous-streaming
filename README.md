@@ -161,7 +161,19 @@ Idempotently provision consumer groups for decoupled stream processing and comma
 .\scripts\provision-consumer-groups.ps1
 ```
 
-### 4. Run Schema Migrations
+### 4. Verify Arroyo Stream Processor & Broker Ingestion
+
+Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated to Apache Iggy via `svc_ferrous_streaming`, attaching consumer groups `cg-arroyo-raw` and `cg-arroyo-state`:
+
+```bash
+# POSIX Bash
+./scripts/provision-arroyo.sh
+
+# PowerShell
+.\scripts\provision-arroyo.ps1
+```
+
+### 5. Run Schema Migrations
 
 ```bash
 # Apply Arroyo SQL schema migrations to create streaming pipelines

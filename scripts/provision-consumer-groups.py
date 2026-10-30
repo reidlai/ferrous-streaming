@@ -120,15 +120,16 @@ def load_env_secret(env_path: Path | str = ".env") -> str:
                     prefix = f"{key}="
                     if line.startswith(prefix):
                         raw_val = line.split("=", 1)[1].strip()
-                        # Strip outer quotes and trailing comments if outside quotes
-                        if (raw_val.startswith('"') and raw_val.endswith('"')) or (
-                            raw_val.startswith("'") and raw_val.endswith("'")
-                        ):
-                            val = raw_val[1:-1]
+                        if raw_val.startswith('"'):
+                            end_idx = raw_val.find('"', 1)
+                            val = raw_val[1:end_idx] if end_idx != -1 else raw_val[1:]
+                        elif raw_val.startswith("'"):
+                            end_idx = raw_val.find("'", 1)
+                            val = raw_val[1:end_idx] if end_idx != -1 else raw_val[1:]
                         else:
                             val = raw_val.split("#", 1)[0].strip()
                         val = val.strip('"\'')
-                        if val and val != "********":
+                        if val and val not in ("********", "changeme", "TODO"):
                             return val
 
     return ""

@@ -1,0 +1,16 @@
+# Arroyo Stream Processor Configuration for FerrousCX
+# Submodule: ferrous-streaming
+# Provides Arroyo controller/worker runtime configuration with embedded web UI.
+
+checkpoint-url = "file:///data/arroyo/checkpoints"
+
+[api]
+bind_address = "0.0.0.0:5115"
+web_ui_enabled = true
+
+[controller]
+scheduler = "node"
+
+[pipeline]
+default_parallelism = 1
+compaction_enabled = true

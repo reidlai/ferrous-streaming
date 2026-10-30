@@ -54,3 +54,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-state-consolidator
+        name: Validate Consolidated State Materialization Pipeline & Delta Sink
+        entry: python tests/test_state_consolidator.py
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -13,5 +13,9 @@ cd "${REPO_ROOT}"
 echo "--> Applying Pipeline 1: raw_event_archiver..."
 bash "${SCRIPT_DIR}/deploy-pipeline-raw-archiver.sh" "$@"
 
+# Deploy Pipeline 2: state_snapshot_consolidator (Story 3.7)
+echo "--> Applying Pipeline 2: state_snapshot_consolidator..."
+bash "${SCRIPT_DIR}/deploy-pipeline-state-consolidator.sh" "$@"
+
 echo "=== [ferrous-streaming] All Streaming Pipeline Migrations Applied Successfully ==="
 

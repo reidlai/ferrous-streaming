@@ -27,6 +27,14 @@ try {
         exit $LASTEXITCODE
     }
 
+    # Deploy Pipeline 2: state_snapshot_consolidator (Story 3.7)
+    Write-Host "--> Applying Pipeline 2: state_snapshot_consolidator..." -ForegroundColor Yellow
+    $Deploy2 = Join-Path $ScriptDir "deploy-pipeline-state-consolidator.ps1"
+    & $Deploy2 @ArgsList
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
     Write-Host "=== [ferrous-streaming] All Streaming Pipeline Migrations Applied Successfully ===" -ForegroundColor Green
 } finally {
     Pop-Location

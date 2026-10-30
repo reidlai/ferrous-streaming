@@ -12,16 +12,16 @@ LABEL org.opencontainers.image.title="ferrous-streaming-arroyo" \
       org.opencontainers.image.vendor="FerrousCX" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# Install minimal runtime dependencies (ca-certificates, curl) and clean apt cache
+# Install minimal runtime dependencies (ca-certificates, curl, libsasl2) and clean apt cache
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
+    apt-get install -y --no-install-recommends ca-certificates curl libsasl2-2 && \
     rm -rf /var/lib/apt/lists/*
 
 # Create unprivileged non-root user and group (UID/GID 10001)
 RUN groupadd -g 10001 arroyo && \
-    useradd -u 10001 -g arroyo -s /sbin/nologin arroyo && \
-    mkdir -p /data/arroyo /data/delta /etc/arroyo /usr/local/bin && \
-    chown -R 10001:10001 /data/arroyo /data/delta /etc/arroyo
+    useradd -u 10001 -g arroyo -m -d /home/arroyo -s /sbin/nologin arroyo && \
+    mkdir -p /data/arroyo /data/delta /etc/arroyo /usr/local/bin /home/arroyo/.config/arroyo && \
+    chown -R 10001:10001 /data/arroyo /data/delta /etc/arroyo /home/arroyo
 
 WORKDIR /data/arroyo
 
@@ -29,8 +29,8 @@ WORKDIR /data/arroyo
 COPY --chown=10001:10001 config/arroyo.toml /etc/arroyo/arroyo.toml
 COPY --chown=10001:10001 pipelines/ /etc/arroyo/pipelines/
 
-# Copy binaries from upstream stage
-COPY --from=upstream /usr/local/bin/arroyo /usr/local/bin/arroyo
+# Copy binaries from upstream stage (/app/arroyo in upstream image)
+COPY --from=upstream /app/arroyo /usr/local/bin/arroyo
 
 # Switch to rootless runtime user
 USER 10001:10001
@@ -44,8 +44,7 @@ EXPOSE 5115
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
   CMD ["curl", "-f", "http://localhost:5115/api/v1/ping"]
 
-ENV ARROYO_API_PORT=5115 \
-    ARROYO__CONFIG_DIR=/etc/arroyo
+ENV HOME=/home/arroyo
 
 ENTRYPOINT ["/usr/local/bin/arroyo"]
 CMD ["--config", "/etc/arroyo/arroyo.toml", "cluster"]

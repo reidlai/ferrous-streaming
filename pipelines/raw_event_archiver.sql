@@ -3,34 +3,30 @@
 -- Decouples raw event archiving into Delta Lake orders_raw_events table with 10s tumbling micro-batches.
 
 CREATE TABLE IF NOT EXISTS orders_intake_source (
-    payload_id STRING,
-    order_id STRING,
+    payload_id TEXT,
+    order_id TEXT,
     event_timestamp TIMESTAMP,
-    payload STRING,
-    ingested_at TIMESTAMP,
-    WATERMARK FOR event_timestamp AS event_timestamp - INTERVAL '1' SECOND
+    payload TEXT,
+    ingested_at TIMESTAMP
 ) WITH (
-    'connector' = 'kafka',
-    'bootstrap_servers' = 'iggy-broker:9092',
-    'topic' = 'orders/intake',
-    'group.id' = 'cg-arroyo-raw',
-    'type' = 'source',
-    'format' = 'json',
-    'auto_offset_reset' = 'earliest'
+    connector = 'kafka',
+    bootstrap_servers = 'iggy-broker:9092',
+    topic = 'orders/intake',
+    type = 'source',
+    format = 'json'
 );
 
 CREATE TABLE IF NOT EXISTS orders_raw_events_sink (
-    payload_id STRING,
-    order_id STRING,
+    payload_id TEXT,
+    order_id TEXT,
     event_timestamp TIMESTAMP,
-    payload STRING,
+    payload TEXT,
     ingested_at TIMESTAMP
 ) WITH (
-    'connector' = 'delta',
-    'path' = '/data/delta/orders_raw_events',
-    'format' = 'parquet',
-    'rollover_seconds' = '10',
-    'filename.strategy' = 'uuid'
+    connector = 'filesystem',
+    path = '/data/delta/orders_raw_events',
+    type = 'sink',
+    format = 'parquet'
 );
 
 INSERT INTO orders_raw_events_sink
@@ -39,6 +35,5 @@ SELECT
     order_id,
     event_timestamp,
     payload,
-    COALESCE(ingested_at, CURRENT_TIMESTAMP) AS ingested_at
+    COALESCE(ingested_at, now()) AS ingested_at
 FROM orders_intake_source;
-

@@ -30,3 +30,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-topic-partitioning
+        name: Validate Topic Partitioning & Immediate Durability
+        entry: python tests/test_topic_partitioning.py
+        language: system
+        pass_filenames: false
+        always_run: true

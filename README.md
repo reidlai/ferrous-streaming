@@ -137,7 +137,19 @@ docker compose ps
 * **Apache Iggy Prometheus Metrics:** `http://localhost:3000/metrics` (Requires Bearer token)
 * **Arroyo Web UI:** `http://localhost:5115`
 
-### 2. Run Schema Migrations
+### 2. Provision Ingestion Topics & Partition Durability
+
+Idempotently initialize stream `orders` and partitioned topics (`intake` and `consolidated`, 4 partitions each) with immediate `fsync` persistence:
+
+```bash
+# POSIX Bash
+./scripts/provision-topics.sh
+
+# PowerShell
+.\scripts\provision-topics.ps1
+```
+
+### 3. Run Schema Migrations
 
 ```bash
 # Apply Arroyo SQL schema migrations to create streaming pipelines

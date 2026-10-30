@@ -68,6 +68,7 @@ flowchart LR
 | :--- | :--- | :--- | :--- |
 | **Apache Iggy (Kafka Gateway)** | `9092` | Kafka Wire Protocol (TCP) | Ingestion sink for `stream-replay-rs` and Kafka producers |
 | **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency management and streaming |
+| **Apache Iggy (HTTP Management)** | `3000` | HTTP / REST | Health probe (`/ping`), Auth (`/users/login`), and `/metrics` |
 | **Arroyo Web Dashboard** | `5115` | HTTP / WebSocket | Stream pipeline monitoring, metrics, and checkpoint inspection |
 
 ---
@@ -115,6 +116,9 @@ docker compose ps
 ```
 
 * **Apache Iggy Kafka Gateway:** `localhost:9092`
+* **Apache Iggy Native TCP:** `localhost:8090`
+* **Apache Iggy HTTP Health Check:** `http://localhost:3000/ping` (`pong`)
+* **Apache Iggy Prometheus Metrics:** `http://localhost:3000/metrics` (Requires Bearer token)
 * **Arroyo Web UI:** `http://localhost:5115`
 
 ### 2. Run Schema Migrations

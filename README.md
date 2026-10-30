@@ -17,18 +17,6 @@ This submodule packages and runs the streaming engine and broker runtime, orches
 ## 🏛️ System Architecture
 
 ```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#2b2b2b',
-    'edgeLabelBackground': '#1e1e1e'
-  },
-  'flowchart': {
-    'subGraphTitleMargin': { 'top': 12, 'bottom': 24 },
-    'nodeSpacing': 45,
-    'rankSpacing': 55
-  }
-}}%%
 flowchart LR
     subgraph Ingestion_Source ["External Traffic Replayer"]
         Replayer["stream-replay-rs<br/>(Olist Dataset Replay)"]

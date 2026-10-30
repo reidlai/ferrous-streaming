@@ -1,0 +1,87 @@
+name: Tier-2 DevSecOps Streaming Stack CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'epic-*'
+  pull_request:
+    branches:
+      - main
+      - 'epic-*'
+
+jobs:
+  secret-scan:
+    name: Gitleaks Secret Zero Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  streaming-unit-tests:
+    name: Apache Iggy & Arroyo Unit Test Discovery
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run All Submodule Unit Tests
+        run: python -m unittest discover tests
+
+  docker-lint-and-security:
+    name: Hadolint & Trivy Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint on Dockerfile.iggy
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.iggy
+          failure-threshold: warning
+
+      - name: Run Hadolint on Dockerfile.arroyo
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.arroyo
+          failure-threshold: warning
+
+      - name: Build Apache Iggy Container Image
+        run: docker build -t ferrous-streaming-iggy:latest -f Dockerfile.iggy .
+
+      - name: Build Arroyo Container Image
+        run: docker build -t ferrous-streaming-arroyo:latest -f Dockerfile.arroyo .
+
+      - name: Run Trivy Scanner on Iggy Broker Image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'ferrous-streaming-iggy:latest'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Run Trivy Scanner on Arroyo Processor Image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'ferrous-streaming-arroyo:latest'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+

@@ -25,8 +25,9 @@ RUN groupadd -g 10001 arroyo && \
 
 WORKDIR /data/arroyo
 
-# Copy configuration
+# Copy configuration and streaming SQL pipeline definitions
 COPY --chown=10001:10001 config/arroyo.toml /etc/arroyo/arroyo.toml
+COPY --chown=10001:10001 pipelines/ /etc/arroyo/pipelines/
 
 # Copy binaries from upstream stage
 COPY --from=upstream /usr/local/bin/arroyo /usr/local/bin/arroyo

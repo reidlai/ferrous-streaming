@@ -6,14 +6,14 @@ FROM apache/iggy:latest AS upstream
 
 FROM alpine:3.20
 
-LABEL org.opencontainers.image.title="ferrous-streaming" \
+LABEL org.opencontainers.image.title="ferrous-streaming-iggy" \
       org.opencontainers.image.description="Hardened Apache Iggy message broker container for FerrousCX" \
       org.opencontainers.image.version="0.1.0" \
       org.opencontainers.image.vendor="FerrousCX" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# Install minimal runtime dependencies (pure Rust core)
-RUN apk add --no-cache ca-certificates libgcc
+# Install minimal runtime dependencies (pure Rust core + curl for healthcheck)
+RUN apk add --no-cache ca-certificates libgcc curl
 
 # Create unprivileged non-root user and group (UID/GID 10001)
 RUN addgroup -g 10001 -S iggy && \
@@ -39,7 +39,7 @@ VOLUME ["/data/iggy"]
 EXPOSE 8090 3000 9092
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-  CMD ["/usr/local/bin/iggy-server", "--version"]
+  CMD ["curl", "-f", "http://localhost:3000/ping"]
 
 ENV IGGY_CONFIG_PATH=/etc/iggy/iggy.toml
 

@@ -60,3 +60,15 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-submodule-standards
+        name: Validate Submodule Documentation & Tier 2 Security CI Gate
+        entry: python tests/test_submodule_standards.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-container-builds
+        name: Validate Multi-Service Docker Image Builds & Security Profiles
+        entry: python tests/test_container_builds.py
+        language: system
+        pass_filenames: false
+        always_run: true

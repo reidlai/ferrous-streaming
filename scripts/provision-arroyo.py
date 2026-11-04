@@ -9,8 +9,8 @@ Responsibilities:
 2. Verifies Apache Iggy broker liveness (GET /ping on port 3000).
 3. Acquires M2M JWT for service account 'svc_ferrous_streaming' adhering to Secret Zero.
 4. Idempotently provisions and validates Arroyo connection configuration for Iggy:
-   - Ingestion connection to Kafka-compatible gateway (port 9092).
-   - Attachment to consumer group 'cg-arroyo-raw' on 'orders/intake'.
+   - Ingestion connection to the Iggy-Kafka bridge (bridge:9092).
+   - Attachment to consumer group 'cg-arroyo-raw' on the Kafka name 'orders.intake' (Iggy orders/intake).
    - Attachment to consumer group 'cg-arroyo-state' on 'orders/consolidated'.
 5. Verifies consumer group offset isolation and zero-conflict multi-consumer setup.
 """
@@ -40,7 +40,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 DEFAULT_ARROYO_URL = os.environ.get("ARROYO_API_URL", os.environ.get("ARROYO_HTTP_URL", "http://localhost:5115"))
 DEFAULT_IGGY_URL = os.environ.get("STREAMING_HTTP_URL", os.environ.get("IGGY_HTTP_URL", "http://localhost:3000"))
-DEFAULT_KAFKA_BOOTSTRAP = os.environ.get("IGGY_KAFKA_BOOTSTRAP", "localhost:9092")
+# Arroyo runs on the compose network and reaches Iggy through the Iggy-Kafka bridge (AD-28).
+DEFAULT_KAFKA_BOOTSTRAP = os.environ.get("IGGY_KAFKA_BOOTSTRAP", "bridge:9092")
 DEFAULT_SERVICE_ACCOUNT = os.environ.get("STREAMING_SERVICE_ACCOUNT", "svc_ferrous_streaming")
 
 ARROYO_CONSUMER_GROUPS = [
@@ -280,7 +281,7 @@ def register_arroyo_connection(
         "table_type": "source",
         "config": {
             "bootstrap_servers": bootstrap_servers,
-            "topic": "orders/intake",
+            "topic": "orders.intake",
             "group_id": "cg-arroyo-raw",
             "security_protocol": "PLAINTEXT",
             "auto_offset_reset": "earliest",

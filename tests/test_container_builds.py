@@ -26,7 +26,7 @@ class ContainerBuildsUnitTests(unittest.TestCase):
         self.assertIn("FROM alpine:3.20", content)
         self.assertIn("USER 10001:10001", content)
         self.assertIn('VOLUME ["/data/iggy"]', content)
-        self.assertIn("EXPOSE 8090 3000 9092", content)
+        self.assertIn("EXPOSE 8090 3000\n", content)
         self.assertIn("/usr/local/bin/iggy-server", content)
 
         # DevSecOps: Zero JVM, Zero Python in broker image

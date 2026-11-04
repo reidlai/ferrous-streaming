@@ -1,5 +1,7 @@
 -- Arroyo Streaming SQL Pipeline: state_snapshot_consolidator
 -- Story: 3.7 (Consolidated State Materialization Pipeline - orders_current_state)
+-- The source reads Iggy through the Iggy-Kafka bridge (AD-28): bridge:9092, the Kafka name orders.consolidated
+-- (kafka_name in ferrous-cx/contracts/topics.yml) and the settings required by the Bridge Contract Sheet, section 6.
 -- Consumes state projections from orders/consolidated and commits updated entity snapshots to Delta Lake orders_current_state.
 
 CREATE TABLE IF NOT EXISTS orders_consolidated_source (
@@ -10,10 +12,13 @@ CREATE TABLE IF NOT EXISTS orders_consolidated_source (
     version BIGINT
 ) WITH (
     connector = 'kafka',
-    bootstrap_servers = 'iggy-broker:9092',
-    topic = 'orders/consolidated',
+    bootstrap_servers = 'bridge:9092',
+    topic = 'orders.consolidated',
     type = 'source',
-    format = 'json'
+    format = 'json',
+    'source.offset' = 'earliest',
+    'source.group_id' = 'cg-arroyo-state',
+    client_configs = 'auto.offset.reset=error,isolation.level=read_uncommitted'
 );
 
 CREATE TABLE IF NOT EXISTS orders_current_state_sink (

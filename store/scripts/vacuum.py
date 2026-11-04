@@ -2,7 +2,7 @@
 """
 vacuum.py: Delta Lake VACUUM Retention Automation.
 Prunes historical tombstoned Parquet files older than retention threshold (default 168h).
-Requires authenticated svc_ferrous_lakehouse credentials (FR-23, AD-16).
+Requires no credentials: access is bounded by the container and the Delta volume.
 """
 
 import argparse
@@ -18,9 +18,6 @@ if sys.platform == "win32":
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Import auth helper
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from auth_check import enforce_service_account
 
 def get_latest_commit_version(log_dir: Path) -> int:
     commits = list(log_dir.glob("*.json"))
@@ -126,20 +123,13 @@ def main():
                         help="Root directory for Delta tables")
     parser.add_argument("--retention-hours", type=int, default=168,
                         help="Retention threshold in hours (default: 168)")
-    parser.add_argument("--service-account", type=str, default=None,
-                        help="IAM Service Account name")
-    parser.add_argument("--service-token", type=str, default=None,
-                        help="IAM Service Account token")
     args = parser.parse_args()
-
-    # Enforce Auth
-    enforce_service_account(args.service_account, args.service_token)
 
     data_dir = Path(args.data_dir).resolve()
     table_dir = data_dir / args.table
 
     print("=" * 60)
-    print(f"Running Authenticated VACUUM on table: {args.table} (Retention: {args.retention_hours}h)")
+    print(f"Running VACUUM on table: {args.table} (Retention: {args.retention_hours}h)")
     print("=" * 60)
 
     if not table_dir.is_dir():

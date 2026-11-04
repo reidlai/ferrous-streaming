@@ -1,17 +1,21 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Add scripts directory to path
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+STORE_DIR = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = STORE_DIR / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(STORE_DIR))
 
-from auth_check import verify_service_account
+import entrypoint
 from init_tables import init_table, REPO_ROOT
 from optimize import run_optimize
 from vacuum import run_vacuum
@@ -27,14 +31,38 @@ class TestLakehouseMaintenance(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_authentication_validation(self):
-        # Missing or bad credentials
-        self.assertFalse(verify_service_account("random_user", "bad_token"))
-        self.assertFalse(verify_service_account("svc_ferrous_lakehouse", "<REPLACE_WITH_..."))
-        self.assertFalse(verify_service_account("svc_ferrous_lakehouse", "short"))
+    def _env_without_credentials(self):
+        """Environment with every LAKEHOUSE_* variable removed (no token, no account)."""
+        return {k: v for k, v in os.environ.items() if not k.startswith("LAKEHOUSE_")}
 
-        # Valid service account credentials
-        self.assertTrue(verify_service_account("svc_ferrous_lakehouse", "lakehouse_secret_token_12345"))
+    def test_scripts_run_without_any_token(self):
+        # Maintenance has no application-level auth: it must run with no credentials set.
+        (self.table_dir / "part-0001.parquet").write_bytes(b"small_parquet_1")
+        env = self._env_without_credentials()
+        runs = (
+            ("optimize.py", []),
+            ("vacuum.py", ["--retention-hours", "168"]),
+        )
+        for script, extra in runs:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPTS_DIR / script), "--table", self.table_name,
+                 "--data-dir", str(self.temp_dir), *extra],
+                env=env, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("401", proc.stderr)
+        log_dir = self.table_dir / "_delta_log"
+        self.assertTrue((log_dir / "00000000000000000001.json").exists())
+        self.assertTrue((log_dir / "00000000000000000002.json").exists())
+
+    def test_entrypoint_maintain_without_any_token(self):
+        (self.table_dir / "part-0001.parquet").write_bytes(b"small_parquet_1")
+        env = self._env_without_credentials()
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch.object(entrypoint, "DATA_DIR", self.temp_dir):
+                self.assertEqual(entrypoint.do_maintain(), 0)
+        # OPTIMIZE then VACUUM each committed once on the initialised table.
+        self.assertTrue((self.table_dir / "_delta_log" / "00000000000000000002.json").exists())
 
     def test_optimize_compaction_commit(self):
         # Create dummy uncompacted parquet files

@@ -1,0 +1,68 @@
+{
+  "fields": [
+    {
+      "name": "run_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "UUIDv7 benchmark run identifier" }
+    },
+    {
+      "name": "model_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Model identifier" }
+    },
+    {
+      "name": "provider",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Model serving provider" }
+    },
+    {
+      "name": "ttft_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Time-to-first-token in microseconds" }
+    },
+    {
+      "name": "tps",
+      "type": { "name": "floatingpoint", "precision": "DOUBLE" },
+      "nullable": false,
+      "metadata": { "description": "Token throughput per second" }
+    },
+    {
+      "name": "itl_jitter_us",
+      "type": { "name": "floatingpoint", "precision": "DOUBLE" },
+      "nullable": false,
+      "metadata": { "description": "Inter-token latency jitter in microseconds" }
+    },
+    {
+      "name": "tool_call_valid",
+      "type": { "name": "bool" },
+      "nullable": false,
+      "metadata": { "description": "Tool calling syntax schema validation flag" }
+    },
+    {
+      "name": "domain_invariant_valid",
+      "type": { "name": "bool" },
+      "nullable": false,
+      "metadata": { "description": "Domain invariants check flag" }
+    },
+    {
+      "name": "pii_masked",
+      "type": { "name": "bool" },
+      "nullable": false,
+      "metadata": { "description": "Zero-PII verification flag" }
+    },
+    {
+      "name": "timestamp_utc",
+      "type": { "name": "timestamp", "unit": "MICROSECOND", "timezone": "UTC" },
+      "nullable": false,
+      "metadata": { "description": "Benchmark run timestamp (micros UTC)" }
+    }
+  ],
+  "metadata": {
+    "table_name": "llm_benchmarks",
+    "partition_keys": ["model_id"]
+  }
+}

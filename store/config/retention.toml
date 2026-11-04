@@ -1,0 +1,22 @@
+# ferrous-lakehouse Retention & Compaction Policy Configuration
+# Defines VACUUM retention hours and OPTIMIZE target file sizes.
+
+[maintenance]
+enabled = true
+service_account = "svc_ferrous_lakehouse"
+
+[compaction.orders_current_state]
+target_file_size_mb = 128
+z_order_columns = ["order_id", "updated_at"]
+
+[compaction.orders_raw_events]
+target_file_size_mb = 128
+z_order_columns = ["order_id", "event_timestamp"]
+
+[compaction.llm_benchmarks]
+target_file_size_mb = 128
+z_order_columns = ["model_id", "timestamp_utc"]
+
+[retention]
+default_vacuum_retention_hours = 168 # 7 days
+min_vacuum_retention_hours = 24

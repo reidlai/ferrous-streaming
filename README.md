@@ -8,9 +8,9 @@
 [![Container Security: Trivy Passing](https://img.shields.io/badge/Trivy-0%20High%2FCritical-brightgreen.svg)](#container-security--devsecops)
 [![Target: Apache Iggy + Arroyo](https://img.shields.io/badge/stack-Iggy%20%2B%20Arroyo%20%2B%20Delta%20Lake-orange.svg)](#system-architecture)
 
-**`ferrous-streaming`** is the dedicated streaming data ingestion and lakehouse ETL submodule of the **FerrousCX** enterprise platform. It packages and orchestrates **Apache Iggy** (high-throughput Write-Ahead Log streaming broker) and **Arroyo** (Rust-native stateful stream processing engine) into containerized services.
+**`ferrous-streaming`** is the **consolidated data platform** of the **FerrousCX** enterprise platform. One repository packages and orchestrates **Apache Iggy** (high-throughput Write-Ahead Log streaming broker), **Arroyo** (Rust-native stateful stream processing engine), the **Delta store** (`store/`) and a standalone **Apache DataFusion** query service, together with the platform's HPC benchmark. They are deployed as one compose deliverable of separate services, not merged into one process. The former `ferrous-lakehouse` and `ferrous-query-engine` repositories are retired into this one.
 
-This submodule packages and runs the streaming engine and broker runtime, orchestrating Arroyo SQL pipelines, schema migration scripts, and transactional two-phase commit (2PC) Parquet sinks to **Delta Lake**, while historical dataset replay configurations are driven externally by **`stream-replay-rs`** (supporting Kafka, NATS JetStream, and Fluvio).
+This submodule packages and runs the streaming engine and broker runtime, orchestrating Arroyo SQL pipelines, schema migration scripts, and transactional two-phase commit (2PC) Parquet sinks to **Delta Lake**, while dataset replay is performed externally by the generic, platform-agnostic **`stream-replay-rs`**. Topic names, replay profiles and the Olist dataset are owned by `ferrous-cx`, which provisions the topics this platform consumes.
 
 ---
 
@@ -74,13 +74,18 @@ flowchart LR
 | **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency management and streaming |
 | **Apache Iggy (HTTP Management)** | `3000` | HTTP / REST | Health probe (`/ping`), Auth (`/users/login`), and `/metrics` |
 | **Arroyo Web Dashboard** | `5115` | HTTP / WebSocket | Stream pipeline monitoring, metrics, and checkpoint inspection |
+| **DataFusion Query Service** *(planned)* | `50051` | Arrow Flight SQL (gRPC) | Analytical SQL over the Delta store for consumers other than `ferrous-api` |
+| **DataFusion Query Service** *(planned)* | `8085` | HTTP | Query and health endpoints of the same service |
+
+> [!NOTE]
+> **Kafka gateway status.** With the Iggy 0.9 image the stack builds, port `9092` is published but nothing listens on it, so a Kafka-protocol producer cannot reach the broker through it today. How Arroyo and the replayer ingest from Iggy is an open architecture question (`OPEN Arroyo-Iggy Path`) that blocks the pipeline stories.
 
 ---
 
 ## ⚡ Key Capabilities
 
 1. **Dedicated Historical Data Ingestion Broker:**
-   * Pre-configured Apache Iggy stream topologies (`orders/intake`, `orders/consolidated`) optimized for sub-millisecond fsync ingestion and zero-copy consumer groups.
+   * Pre-configured Apache Iggy stream topologies for the topics provisioned by `ferrous-cx` (`olist/orders_stream`, `orders/intake`, `orders/consolidated`), optimized for sub-millisecond fsync ingestion and zero-copy consumer groups.
    * Native Kafka protocol gateway allowing external producer tools (like `stream-replay-rs`) to publish events with zero custom dependencies.
 2. **Schema Versioning & SQL Migrations as Code:**
    * Versioned SQL DDL scripts (`migrations/001_initial_olist_schema.sql`, `migrations/002_add_delivery_sla_fields.sql`).
@@ -96,6 +101,14 @@ flowchart LR
 ## Delta Store (`store/`)
 
 The Delta Lake table definitions, retention config, and `init-tables` / `optimize` / `vacuum` scripts live in `store/`, relocated from the former `ferrous-lakehouse` repository with history preserved. Arroyo writes the streaming tables; the `delta-store` compose service initializes and maintains them. See `store/README.md`.
+
+---
+
+## HPC Benchmark (`benchmark/`, planned)
+
+The platform's high-performance benchmark is public and lives here, based on the workload and method of **HPC-MQBench**. It measures the FerrousCX platform end to end, and a run counts only when every record is accounted for. It uses the generic `stream-replay-rs` as its load driver (the `ferrous-cx` load profile, `--rate 25`, or a rate set by the benchmark) and holds no benchmark knowledge in the replayer.
+
+Published third-party broker figures, with their conditions and caveats, are kept in [`docs/published-broker-figures.md`](docs/published-broker-figures.md). They are not results of this benchmark.
 
 ---
 
@@ -157,7 +170,7 @@ Idempotently provision consumer groups for decoupled stream processing and comma
 
 ### 4. Verify Arroyo Stream Processor & Broker Ingestion
 
-Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated to Apache Iggy via `svc_ferrous_streaming`, attaching consumer groups `cg-arroyo-raw` and `cg-arroyo-state`:
+Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated to Apache Iggy with its own native credentials (these services are not Kanidm clients), attaching the consumer groups `cg-arroyo-olist` (`olist/orders_stream`), `cg-arroyo-raw` (`orders/intake`) and `cg-arroyo-state` (`orders/consolidated`):
 
 ```bash
 # POSIX Bash

@@ -196,7 +196,7 @@ class RawEventArchiverUnitTests(unittest.TestCase):
         self.assertIn("ingested_at TIMESTAMP", content)
 
         # Cross-validate against Lakehouse schema if parent workspace exists
-        lakehouse_sql = REPO_ROOT.parent / "ferrous-lakehouse" / "schemas" / "streaming" / "orders_raw_events.sql"
+        lakehouse_sql = REPO_ROOT / "store" / "schemas" / "streaming" / "orders_raw_events.sql"
         if lakehouse_sql.is_file():
             lake_content = lakehouse_sql.read_text(encoding="utf-8")
             for col in ["payload_id STRING", "order_id STRING", "event_timestamp TIMESTAMP", "payload STRING", "ingested_at TIMESTAMP"]:

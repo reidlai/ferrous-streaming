@@ -1,0 +1,1 @@
+{"commitInfo": {"timestamp": 1793268000463, "operation": "VACUUM END", "operationParameters": {"retentionCheckEnabled": "true", "specifiedRetentionMillis": 604800000, "defaultParallelism": 1}, "metrics": {"numFilesDeleted": 0, "numActiveFiles": 1}, "engineInfo": "ferrous-lakehouse-maintenance/1.0.0"}}

@@ -1,0 +1,39 @@
+{
+  "fields": [
+    {
+      "name": "payload_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "UUIDv7 event identifier" }
+    },
+    {
+      "name": "order_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Olist order identifier" }
+    },
+    {
+      "name": "event_timestamp",
+      "type": { "name": "timestamp", "unit": "MICROSECOND", "timezone": "UTC" },
+      "nullable": false,
+      "metadata": { "description": "Microsecond precision event timestamp" }
+    },
+    {
+      "name": "payload",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "PII-redacted JSON string payload" }
+    },
+    {
+      "name": "ingested_at",
+      "type": { "name": "timestamp", "unit": "MICROSECOND", "timezone": "UTC" },
+      "nullable": false,
+      "metadata": { "description": "Arrival microsecond timestamp at lakehouse" }
+    }
+  ],
+  "metadata": {
+    "table_name": "orders_raw_events",
+    "partition_keys": ["event_timestamp"],
+    "delta.appendOnly": "true"
+  }
+}

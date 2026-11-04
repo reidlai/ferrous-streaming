@@ -1,4 +1,4 @@
-# PowerShell Runner for authenticated lakehouse VACUUM
+# PowerShell Runner for lakehouse VACUUM
 param(
     [string]$Table = "orders_current_state",
     [int]$RetentionHours = 168
@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "==> Running authenticated lakehouse VACUUM on table: $Table (Retention: ${RetentionHours}h)..." -ForegroundColor Cyan
+Write-Host "==> Running lakehouse VACUUM on table: $Table (Retention: ${RetentionHours}h)..." -ForegroundColor Cyan
 python "$ScriptDir/vacuum.py" --table "$Table" --retention-hours $RetentionHours
 if ($LASTEXITCODE -ne 0) {
     Write-Error "VACUUM failed."

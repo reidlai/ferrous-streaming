@@ -1,6 +1,6 @@
 # ferrous-lakehouse
 
-> **Relocated.** This content was the `ferrous-lakehouse` repository until 2026-11-04. It now lives in `ferrous-streaming/store/` (architecture AD-17, AD-25) with its history preserved. Paths below are relative to `store/`; the service-account token gating described here is removed by rework Stories 2.3 and 2.5.
+> **Relocated.** This content was the `ferrous-lakehouse` repository until 2026-11-04. It now lives in `ferrous-streaming/store/` (architecture AD-17, AD-25) with its history preserved. Paths below are relative to `store/`. Maintenance (OPTIMIZE / VACUUM) needs no credentials (Story 2.3 rework); see [Access Model](#-access-model-no-credentials-for-maintenance).
 
 [← Back to FerrousCX Root Architecture](https://github.com/reidlai/ferrous-cx)
 
@@ -20,7 +20,7 @@
 ```mermaid
 flowchart TD
     subgraph IAM ["Access Control (ferrous-iam)"]
-        Kanidm[("Kanidm IdP (M2M Service Accounts)<br/>• svc_ferrous_streaming (write)<br/>• svc_ferrous_query (read)<br/>• svc_ferrous_lakehouse (manage)")]
+        Kanidm[("Kanidm IdP (M2M Service Accounts)<br/>• svc_ferrous_streaming (write)<br/>• svc_ferrous_query (read)")]
     end
 
     subgraph Writers ["Stream Ingestion & 2PC Writers"]
@@ -41,7 +41,6 @@ flowchart TD
 
     Kanidm -.->|Token: lakehouse:write| Arroyo
     Kanidm -.->|Token: lakehouse:read| DataFusion
-    Kanidm -.->|Token: lakehouse:manage| Lakehouse
     Arroyo -->|2PC Streaming Parquet Commits| RawEvents
     Arroyo -->|2PC Snapshot Commits| CurrentState
     DataFusion -->|Zero-Copy Arrow Scans| CurrentState
@@ -65,60 +64,21 @@ flowchart TD
 
 ---
 
-## 🔒 DevSecOps Secret Zero & Environment Configuration
+## 🔒 Access Model: No Credentials for Maintenance
 
-In strict adherence to the **DevSecOps Secret Zero Policy**, no plaintext credentials or bearer tokens are stored in Git. All storage maintenance operations (`optimize`, `vacuum`) enforce authentication with `svc_ferrous_lakehouse` service account credentials (FR-23, AD-16).
+The maintenance scripts (`scripts/optimize.{py,sh,ps1}` and `scripts/vacuum.{py,sh,ps1}`, and the `--maintain` / daemon modes of `entrypoint.py`) have **no application-level authentication**. They read no token, call no identity provider and need no `.env` file. Access is bounded by the container and the Delta volume instead: whoever can run the `delta-store` container, or write to the mounted `data/delta` volume, can run OPTIMIZE and VACUUM. The compose service runs rootless (UID 10001) with all capabilities dropped and `no-new-privileges`, so control access at the host / orchestrator level.
 
-### Step 1: Initialize `.env` from Masked Blueprint
+Run maintenance directly, with no environment variables set:
 
-#### Windows (PowerShell)
-```powershell
-Copy-Item .env.example .env
-```
-
-#### Linux / macOS (Bash)
 ```bash
-cp .env.example .env
+scripts/optimize.sh orders_current_state 128
+scripts/vacuum.sh orders_current_state 168
 ```
 
----
-
-### Step 2: Configure `LAKEHOUSE_SERVICE_TOKEN`
-
-Choose one of the two operational methods below:
-
-#### Option A: Automated Token Generation from `ferrous-iam` (Recommended)
-You can generate and extract an authentic M2M token for `svc_ferrous_lakehouse` directly using the helper script in `ferrous-iam`:
-
-- **Windows (PowerShell)**:
-  ```powershell
-  ..\ferrous-iam\scripts\get-service-token.ps1 -Account svc_ferrous_lakehouse
-  ```
-- **Linux / macOS (Bash)**:
-  ```bash
-  ../ferrous-iam/scripts/get-service-token.sh svc_ferrous_lakehouse
-  ```
-
-Copy the generated output directly into your `ferrous-lakehouse/.env`:
-```env
-LAKEHOUSE_SERVICE_ACCOUNT=svc_ferrous_lakehouse
-LAKEHOUSE_SERVICE_TOKEN=ferrous_jwt_m2m_svc_ferrous_lakehouse_...
-```
-
-#### Option B: Standalone Local Development (Offline Mode)
-If you are developing or testing `ferrous-lakehouse` in isolation without running the `ferrous-iam` container stack:
-
-1. Open `ferrous-lakehouse/.env`.
-2. Set `LAKEHOUSE_SERVICE_TOKEN` to any local development token string ($\ge 8$ characters, not containing `<REPLACE_...`):
-   ```env
-   LAKEHOUSE_SERVICE_ACCOUNT=svc_ferrous_lakehouse
-   LAKEHOUSE_SERVICE_TOKEN=lakehouse_dev_token_2026
-   ```
-3. Storage maintenance scripts and unit tests will validate this developer token and execute compaction and pruning routines locally.
+Optional settings such as `LAKEHOUSE_DATA_DIR` live in `.env.example`; copy it to `.env` only if you need to override a default.
 
 > [!NOTE]
-> **Why is there no admin sidebar in the Kanidm Web UI?**
-> The Kanidm Web UI (`https://localhost:8443/ui/apps`) is intentionally designed as an end-user self-service portal (for user profile management, WebAuthn security keys, and linked OAuth apps). In Kanidm, administrative operations (such as service accounts, groups, and API tokens) are strictly **CLI- and automation-driven** (`kanidm` CLI / scripts). Use the `get-service-token` helper scripts above to issue service tokens.
+> History: maintenance used to be gated by a token check. That check was removed in the Story 2.3 rework.
 
 ---
 

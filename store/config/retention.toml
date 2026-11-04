@@ -3,7 +3,6 @@
 
 [maintenance]
 enabled = true
-service_account = "svc_ferrous_lakehouse"
 
 [compaction.orders_current_state]
 target_file_size_mb = 128

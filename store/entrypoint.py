@@ -19,7 +19,6 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from init_tables import init_table, REPO_ROOT as SCRIPTS_ROOT
 from optimize import run_optimize
 from vacuum import run_vacuum
-from auth_check import verify_service_account
 
 DATA_DIR = Path(os.environ.get("LAKEHOUSE_DATA_DIR", "/data/delta"))
 
@@ -37,14 +36,8 @@ def do_init() -> int:
     return 0
 
 def do_maintain() -> int:
-    print("==> [MAINTAIN] Running authenticated compaction and log cleanup...")
-    # Verify auth
-    account = os.environ.get("LAKEHOUSE_SERVICE_ACCOUNT")
-    token = os.environ.get("LAKEHOUSE_SERVICE_TOKEN")
-    if not verify_service_account(account, token):
-        sys.stderr.write("ERROR 401: Authentication required for lakehouse maintenance (FR-23, AD-16).\n")
-        return 1
-
+    # No application-level auth: access is bounded by the container and the Delta volume.
+    print("==> [MAINTAIN] Running compaction and log cleanup...")
     tables = ["orders_current_state", "orders_raw_events", "llm_benchmarks"]
     for t in tables:
         t_dir = DATA_DIR / t

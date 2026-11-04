@@ -25,10 +25,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Step 4: Test Maintenance Operations
 Write-Host "--> [4/4] Verifying Maintenance Automation..." -ForegroundColor Yellow
-python "$ScriptDir/optimize.py" --table orders_current_state --service-account svc_ferrous_lakehouse --service-token quickstart_mock_token_12345
+python "$ScriptDir/optimize.py" --table orders_current_state
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-python "$ScriptDir/vacuum.py" --table orders_current_state --retention-hours 168 --service-account svc_ferrous_lakehouse --service-token quickstart_mock_token_12345
+python "$ScriptDir/vacuum.py" --table orders_current_state --retention-hours 168
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "============================================================" -ForegroundColor Green

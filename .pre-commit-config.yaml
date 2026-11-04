@@ -72,3 +72,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: validate-store-schemas
+        name: Validate Delta Lake Schemas & PII Audit (store/)
+        entry: python store/scripts/validate-schemas.py
+        language: system
+        pass_filenames: false
+        always_run: true

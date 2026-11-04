@@ -232,7 +232,7 @@ def verify_broker_consumer_group(
 def initialize_delta_table_if_missing(delta_table_dir: Path) -> int:
     """
     Initializes Delta Lake table directory and commit log 00000000000000000000.json if not present.
-    Target schema matches ferrous-lakehouse/schemas/streaming/orders_current_state.sql:
+    Target schema matches store/schemas/streaming/orders_current_state.sql:
     - order_id: STRING (Primary Key)
     - status: STRING (Partition Column)
     - credit_issued: BIGINT (DEFAULT 0)

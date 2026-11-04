@@ -93,6 +93,12 @@ flowchart LR
 
 ---
 
+## Delta Store (`store/`)
+
+The Delta Lake table definitions, retention config, and `init-tables` / `optimize` / `vacuum` scripts live in `store/`, relocated from the former `ferrous-lakehouse` repository with history preserved. Arroyo writes the streaming tables; the `delta-store` compose service initializes and maintains them. See `store/README.md`.
+
+---
+
 ## 🛠️ Standalone Developer Quickstart
 
 You can build and test `ferrous-streaming` in Standalone Mode using Docker Compose:

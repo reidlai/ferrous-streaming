@@ -1,5 +1,7 @@
 # ferrous-lakehouse
 
+> **Relocated.** This content was the `ferrous-lakehouse` repository until 2026-11-04. It now lives in `ferrous-streaming/store/` (architecture AD-17, AD-25) with its history preserved. Paths below are relative to `store/`; the service-account token gating described here is removed by rework Stories 2.3 and 2.5.
+
 [← Back to FerrousCX Root Architecture](https://github.com/reidlai/ferrous-cx)
 
 [![Component Type: Delta Lake Storage Tier](https://img.shields.io/badge/component-Delta%20Lake%20Storage-blue.svg)](https://github.com/reidlai/ferrous-cx)

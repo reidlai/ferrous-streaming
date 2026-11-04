@@ -196,7 +196,7 @@ class StateSnapshotConsolidatorUnitTests(unittest.TestCase):
         self.assertIn("version BIGINT", content)
 
         # Cross-validate against Lakehouse schema if present
-        lakehouse_sql = REPO_ROOT.parent / "ferrous-lakehouse" / "schemas" / "streaming" / "orders_current_state.sql"
+        lakehouse_sql = REPO_ROOT / "store" / "schemas" / "streaming" / "orders_current_state.sql"
         if lakehouse_sql.is_file():
             lake_content = lakehouse_sql.read_text(encoding="utf-8")
             for col in ["order_id STRING", "status STRING", "credit_issued BIGINT", "updated_at TIMESTAMP", "version BIGINT"]:

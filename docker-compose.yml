@@ -2,7 +2,7 @@ services:
   iggy-broker:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.iggy
     image: ferrous-streaming-iggy:latest
     container_name: ferrous-iggy-broker
     restart: unless-stopped
@@ -80,3 +80,23 @@ services:
       resources:
         limits:
           memory: 512M
+
+  delta-store:
+    # Delta Lake table initializer and maintenance (relocated from ferrous-lakehouse, now in store/)
+    build:
+      context: ./store
+      dockerfile: Dockerfile
+    image: ferrous-streaming-store:latest
+    container_name: ferrous-delta-store
+    restart: unless-stopped
+    user: "10001:10001"
+    volumes:
+      - ./data/delta:/data/delta
+    environment:
+      - LAKEHOUSE_DATA_DIR=/data/delta
+      - LAKEHOUSE_SERVICE_ACCOUNT=svc_ferrous_lakehouse
+      - LAKEHOUSE_SERVICE_TOKEN=${LAKEHOUSE_SERVICE_TOKEN:-}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

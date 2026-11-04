@@ -1,3 +1,42 @@
+x-bridge-env: &bridge-env
+  IGGY_KAFKA_BRIDGE_ENABLED: "true"            # the image answers with stubs unless this is true
+  IGGY_KAFKA_BIND_ADDR: 0.0.0.0:9092
+  IGGY_KAFKA_IGGY_ADDR: iggy-broker:8090
+  IGGY_KAFKA_IGGY_USERNAME: ${BRIDGE_IGGY_USERNAME:-svc_kafka_bridge}
+  IGGY_KAFKA_IGGY_PASSWORD: ${BRIDGE_IGGY_PASSWORD:-}   # from .env; never written here (Secret Zero)
+  IGGY_KAFKA_TOPIC_MAP_PATH: /etc/iggy-gateway/topic-map.toml
+  IGGY_KAFKA_AUTO_CREATE_TOPICS_ENABLED: "false"   # produce and metadata never create topics (Contract Sheet, section 4)
+  IGGY_KAFKA_IDEMPOTENT_PRODUCERS: "false"         # stays off: turning it on needs every Iggy node and reader upgraded
+
+x-bridge-common: &bridge-common
+  image: apache/iggy-kafka-gateway@sha256:74180b02215b32dc51632ce08b76f41af81f61a2f9d2fe155e0f773c9753e3db
+  restart: on-failure:5
+  user: "65532:65532"          # the upstream image sets no USER and would run as root
+  read_only: true
+  tmpfs:
+    - /tmp
+  volumes:
+    - ./config/bridge/topic-map.toml:/etc/iggy-gateway/topic-map.toml:ro
+  depends_on:
+    iggy-broker:
+      condition: service_healthy
+  healthcheck:
+    # The gateway has no health endpoint. This proves the listener is up, not that Iggy is reachable;
+    # the conformance job adds a Kafka Metadata call per topic (Contract Sheet, section 9).
+    test: ["CMD", "nc", "-z", "127.0.0.1", "9092"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 10s
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+
 services:
   iggy-broker:
     build:
@@ -11,7 +50,6 @@ services:
     ports:
       - "8090:8090"
       - "3000:3000"
-      - "9092:9092"
     env_file:
       - path: .env
         required: false
@@ -54,6 +92,8 @@ services:
     depends_on:
       iggy-broker:
         condition: service_healthy
+      bridge:
+        condition: service_healthy   # Arroyo reads Iggy through the bridge (AD-28)
     env_file:
       - path: .env
         required: false
@@ -62,7 +102,6 @@ services:
       - ./data/arroyo:/data/arroyo
       - ./data/delta:/data/delta
     environment:
-      - IGGY_KAFKA_PORT=9092
       - IGGY_NODE_ADVERTISED_ADDRESS=iggy-broker
       - STREAMING_SERVICE_ACCOUNT=${STREAMING_SERVICE_ACCOUNT:-svc_ferrous_streaming}
       - OTEL_SDK_DISABLED=true
@@ -80,6 +119,38 @@ services:
       resources:
         limits:
           memory: 512M
+
+  # --- Iggy-Kafka bridge (AD-28, Stories 3.13 and 3.14) ---------------------------------
+  # The upstream Apache Iggy Kafka gateway, pinned by digest and configured, not built here
+  # (spike decision: _bmad-output/implementation-artifacts/spike-3-13/decision.md).
+  # Digest = the `edge` tag on 2026-11-04. The gateway is pre-release and publishes only `edge` tags.
+  # The gateway supports one listener per protocol, so two instances of the same image serve the two
+  # networks, each advertising its own address (Contract Sheet, section 9):
+  #   bridge       compose network only, advertised bridge:9092 (Arroyo)
+  #   bridge-host  published on host loopback only, advertised 127.0.0.1:9092 (host-run stream-replay-rs)
+  # Neither instance is ever published on all interfaces. Allowlist: the generated topic map plus
+  # an Iggy user without manage_* permissions. Nothing here has been run yet (live checks L1-L14).
+  bridge:
+    <<: *bridge-common
+    container_name: ferrous-kafka-bridge
+    expose:
+      - "9092"
+    environment:
+      <<: *bridge-env
+      IGGY_KAFKA_NODE_ID: "1"
+      IGGY_KAFKA_ADVERTISED_HOST: bridge
+      IGGY_KAFKA_ADVERTISED_PORT: "9092"
+
+  bridge-host:
+    <<: *bridge-common
+    container_name: ferrous-kafka-bridge-host
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      <<: *bridge-env
+      IGGY_KAFKA_NODE_ID: "2"
+      IGGY_KAFKA_ADVERTISED_HOST: 127.0.0.1
+      IGGY_KAFKA_ADVERTISED_PORT: "9092"
 
   delta-store:
     # Delta Lake table initializer and maintenance (relocated from ferrous-lakehouse, now in store/)

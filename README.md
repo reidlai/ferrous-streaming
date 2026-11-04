@@ -23,7 +23,8 @@ flowchart LR
     end
 
     subgraph Streaming_Submodule ["ferrous-streaming Submodule"]
-        Iggy["Apache Iggy Broker<br/>• Port 9092 (Kafka Wire Gateway)<br/>• Port 8090 (Native TCP)"]
+        Bridge["Iggy-Kafka bridge<br/>• Port 9092 (Kafka wire protocol)"]
+        Iggy["Apache Iggy Broker<br/>• Port 8090 (Native TCP)<br/>• Port 3000 (HTTP)"]
         
         subgraph Arroyo_Engine ["Arroyo Processing Engine"]
             Migrations["Schema Migrations<br/>(v1 -> v2 DDL Evolution)"]
@@ -49,8 +50,9 @@ flowchart LR
         ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
     end
 
-    Replayer -->|Kafka: Port 9092| Iggy
-    Iggy -->|orders/intake| SQLPipeline
+    Replayer -->|Kafka: 127.0.0.1:9092| Bridge
+    Bridge <-->|native SDK| Iggy
+    Bridge -->|Kafka: bridge:9092| SQLPipeline
     Migrations --> SQLPipeline
     SQLPipeline -->|2PC Micro-Batches| DeltaRaw
     SQLPipeline -->|2PC State Projections| DeltaState
@@ -70,15 +72,31 @@ flowchart LR
 
 | Component | Port | Protocol | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Apache Iggy (Kafka Gateway)** | `9092` | Kafka Wire Protocol (TCP) | Ingestion sink for `stream-replay-rs` and Kafka producers |
+| **Iggy-Kafka bridge** | `9092` | Kafka Wire Protocol (TCP) | The platform's only Kafka endpoint: Arroyo reads through it on the compose network (`bridge:9092`), `stream-replay-rs` publishes through it on host loopback (`127.0.0.1:9092`). Never published on all interfaces. |
 | **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency management and streaming |
 | **Apache Iggy (HTTP Management)** | `3000` | HTTP / REST | Health probe (`/ping`), Auth (`/users/login`), and `/metrics` |
 | **Arroyo Web Dashboard** | `5115` | HTTP / WebSocket | Stream pipeline monitoring, metrics, and checkpoint inspection |
 | **DataFusion Query Service** *(planned)* | `50051` | Arrow Flight SQL (gRPC) | Analytical SQL over the Delta store for consumers other than `ferrous-api` |
 | **DataFusion Query Service** *(planned)* | `8085` | HTTP | Query and health endpoints of the same service |
 
-> [!NOTE]
-> **Kafka gateway status.** With the Iggy 0.9 image the stack builds, port `9092` is published but nothing listens on it, so a Kafka-protocol producer cannot reach the broker through it today. How Arroyo and the replayer ingest from Iggy is an open architecture question (`OPEN Arroyo-Iggy Path`) that blocks the pipeline stories.
+> [!WARNING]
+> **Iggy-Kafka bridge status: configured, not yet run.** The Iggy server does not speak Kafka, so Arroyo and the replayer reach Iggy through the bridge (AD-28): the upstream Apache Iggy `iggy-gateway-kafka` image, pinned by digest and configured here, not built here. It is pre-release (only `edge` tags exist). The compose services, topic map, user permissions and pipeline settings below are checked by unit tests, but **nothing has been started or tested against a running stack**: the live checks L1-L14 of the Bridge Contract Sheet are open (`OPEN Bridge Compatibility`). Expect to change this configuration when they run. The Iggy server image (`apache/iggy:latest`, 0.9) is also older than the gateway requires for its offset commits; Arroyo's commits are best effort and its data path does not depend on them, but check it first (L7).
+
+### Iggy-Kafka bridge
+
+Contract: the Bridge Contract Sheet in `ferrous-cx/contracts/` (draft). Topic names and consumer groups come from `ferrous-cx/contracts/topics.yml`.
+
+| Piece | Where | What it does |
+| :--- | :--- | :--- |
+| `bridge` service | `docker-compose.yml` | Gateway instance for the compose network, advertises `bridge:9092`. Arroyo waits for it to be healthy. |
+| `bridge-host` service | `docker-compose.yml` | A second instance of the same image, published on `127.0.0.1:9092` only and advertising that address, for the host-run replayer. The gateway allows one listener per protocol, so two instances are the way to get two advertised addresses. |
+| `config/bridge/topic-map.toml` | generated | Maps Kafka names (`orders.intake`, `orders.consolidated`, `olist.orders_stream`) to Iggy `{stream, topic}`. Any other name resolves to an empty default stream and fails with `UNKNOWN_TOPIC_OR_PARTITION`. Auto-creation of topics is off. |
+| `scripts/generate-bridge-topic-map.py` | script | Regenerates the map from `topics.yml`; `--check` fails when it is stale. |
+| `scripts/provision-bridge-user.py` | script | Builds (dry run) or creates the Iggy user of the bridge. This user is the produce allowlist: it may send only to topics marked `kafka.produce: true` (`olist/orders_stream`), and has no `manage_*` permission, so Kafka CreateTopics, DeleteTopics and AlterConfigs are refused. |
+
+Set `BRIDGE_IGGY_USERNAME` and `BRIDGE_IGGY_PASSWORD` in `.env` (never in the compose file) and create the user before starting the bridge.
+
+**Delivery.** A produce is acknowledged after Iggy confirms the append; with Iggy's default topic durability (`replicated`) that does not include an fsync, so `olist/orders_stream` should be created `persisted`. Producer idempotence is off, so a retried produce can store a record twice; the replayer's `replay.run_id` and `replay.seq` headers identify duplicates. Consumers get at-least-once from the bridge and exactly-once in Delta through Arroyo's checkpoints and two-phase commit.
 
 ---
 
@@ -86,7 +104,7 @@ flowchart LR
 
 1. **Dedicated Historical Data Ingestion Broker:**
    * Pre-configured Apache Iggy stream topologies for the topics provisioned by `ferrous-cx` (`olist/orders_stream`, `orders/intake`, `orders/consolidated`), optimized for sub-millisecond fsync ingestion and zero-copy consumer groups.
-   * Native Kafka protocol gateway allowing external producer tools (like `stream-replay-rs`) to publish events with zero custom dependencies.
+   * An Iggy-Kafka bridge (the upstream Apache Iggy Kafka gateway, configured here) that lets Arroyo and producer tools like `stream-replay-rs` use plain Kafka clients against Iggy (not yet run, see the status note).
 2. **Schema Versioning & SQL Migrations as Code:**
    * Versioned SQL DDL scripts (`migrations/001_initial_olist_schema.sql`, `migrations/002_add_delivery_sla_fields.sql`).
    * Manages stream schema evolution without downtime, schema drift, or corrupted Parquet files.
@@ -138,7 +156,7 @@ docker compose up -d
 docker compose ps
 ```
 
-* **Apache Iggy Kafka Gateway:** `localhost:9092`
+* **Iggy-Kafka bridge (host loopback):** `127.0.0.1:9092`
 * **Apache Iggy Native TCP:** `localhost:8090`
 * **Apache Iggy HTTP Health Check:** `http://localhost:3000/ping` (`pong`)
 * **Apache Iggy Prometheus Metrics:** `http://localhost:3000/metrics` (Requires Bearer token)
@@ -227,7 +245,8 @@ This infrastructure submodule adheres strictly to the **Tier 2 DevSecOps Standar
 
 | Environment Variable | Default Value | Description | Required |
 | :--- | :--- | :--- | :--- |
-| `IGGY_KAFKA_PORT` | `9092` | Port for Kafka-compatible wire protocol gateway | No |
+| `BRIDGE_IGGY_USERNAME` | `svc_kafka_bridge` | Iggy user of the Iggy-Kafka bridge | No |
+| `BRIDGE_IGGY_PASSWORD` | *None* | Password of that Iggy user (set in `.env`) | Yes, to start the bridge |
 | `IGGY_TCP_PORT` | `8090` | Port for native Apache Iggy TCP transport | No |
 | `ARROYO_API_PORT` | `5115` | Port for Arroyo Web Dashboard and REST API | No |
 | `DELTA_STORAGE_URI` | `file:///data/delta` | Storage destination URI (`file://`, `s3://`, `gs://`) | No |

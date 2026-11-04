@@ -177,7 +177,7 @@ def main() -> int:
     ports_to_check = [
         (8090, "native TCP transport"),
         (3000, "HTTP management and metrics API"),
-        (9092, "Kafka protocol wire gateway"),
+        (9092, "Iggy-Kafka bridge (host loopback listener)"),
     ]
     for port, desc in ports_to_check:
         ok, err = check_port_availability("127.0.0.1", port)

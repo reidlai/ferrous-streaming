@@ -80,10 +80,12 @@ class TestBrokerScaffolding(unittest.TestCase):
         # Verify service definition
         self.assertIn("iggy-broker:", content, "Must define 'iggy-broker' service")
 
-        # Verify ports 8090 (TCP), 3000 (HTTP), and 9092 (Kafka)
+        # Verify ports 8090 (TCP) and 3000 (HTTP). Port 9092 belongs to the Iggy-Kafka bridge (AD-28),
+        # published on host loopback only by the 'bridge-host' service; the Iggy server does not publish it.
         self.assertIn('"8090:8090"', content, "Must expose port binding 8090:8090")
         self.assertIn('"3000:3000"', content, "Must expose port binding 3000:3000")
-        self.assertIn('"9092:9092"', content, "Must expose port binding 9092:9092")
+        self.assertIn('"127.0.0.1:9092:9092"', content, "Bridge must publish 9092 on host loopback only")
+        self.assertNotIn('- "9092:9092"', content, "9092 must never be published on all interfaces")
 
         # Verify env_file declaration
         self.assertIn("env_file:", content, "Must declare env_file configuration")
@@ -120,7 +122,8 @@ class TestBrokerScaffolding(unittest.TestCase):
             self.assertIn("USER 10001:10001", content, f"Dockerfile {df.name} must run as USER 10001:10001")
 
             # Check ports and volume
-            self.assertIn("EXPOSE 8090 3000 9092", content, f"Dockerfile {df.name} must expose ports 8090, 3000, 9092")
+            self.assertIn("EXPOSE 8090 3000\n", content, f"Dockerfile {df.name} must expose ports 8090 and 3000 only")
+            self.assertNotIn("9092", content.split("EXPOSE", 1)[1].splitlines()[0], "Iggy server must not expose the Kafka port")
             self.assertIn('VOLUME ["/data/iggy"]', content, f"Dockerfile {df.name} must declare VOLUME /data/iggy")
 
             # Verify pure Rust core (zero JVM, zero Python dependencies inside broker image)

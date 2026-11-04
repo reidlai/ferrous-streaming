@@ -35,8 +35,8 @@ USER 10001:10001
 # Volumes for persistent WAL storage
 VOLUME ["/data/iggy"]
 
-# Expose native TCP (8090), HTTP management (3000), and Kafka wire gateway (9092)
-EXPOSE 8090 3000 9092
+# Expose native TCP (8090) and HTTP management (3000). Kafka clients use the Iggy-Kafka bridge (AD-28), not this server.
+EXPOSE 8090 3000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
   CMD ["curl", "-f", "http://localhost:3000/ping"]

@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -38,6 +39,11 @@ def run_vacuum(table_dir: Path, retention_hours: int = 168) -> dict:
         print(f"  [ERROR] Table {table_dir.name} has no _delta_log directory.")
         return {"status": "error", "message": "no_delta_log"}
 
+    current_version = get_latest_commit_version(log_dir)
+    if current_version < 0:
+        print(f"  [ERROR] Table {table_dir.name} has no valid commits.")
+        return {"status": "error", "message": "no_commits"}
+
     now_ms = int(time.time() * 1000)
     retention_ms = retention_hours * 3600 * 1000
     cutoff_ms = now_ms - retention_ms
@@ -61,7 +67,8 @@ def run_vacuum(table_dir: Path, retention_hours: int = 168) -> dict:
                         tombstones.pop(p, None)
                     elif "remove" in action:
                         p = action["remove"]["path"]
-                        del_ts = action["remove"].get("deletionTimestamp", now_ms)
+                        raw_ts = action["remove"].get("deletionTimestamp")
+                        del_ts = int(raw_ts) if raw_ts is not None else now_ms
                         active_files.discard(p)
                         tombstones[p] = del_ts
                 except Exception:
@@ -71,7 +78,14 @@ def run_vacuum(table_dir: Path, retention_hours: int = 168) -> dict:
     pruned_files = []
     for path_str, del_ts in tombstones.items():
         if del_ts <= cutoff_ms:
-            target_path = table_dir / path_str
+            target_path = (table_dir / path_str).resolve()
+            # Path traversal guard
+            try:
+                if not target_path.is_relative_to(table_dir.resolve()):
+                    print(f"  [WARN] Path traversal attempt detected: {path_str}")
+                    continue
+            except (AttributeError, ValueError):
+                pass
             if target_path.exists():
                 try:
                     target_path.unlink()
@@ -80,7 +94,6 @@ def run_vacuum(table_dir: Path, retention_hours: int = 168) -> dict:
                     print(f"  [WARN] Failed to delete expired file {path_str}: {exc}")
 
     # Record VACUUM commit
-    current_version = get_latest_commit_version(log_dir)
     next_version = current_version + 1
     commit_file = log_dir / f"{next_version:020d}.json"
 
@@ -101,8 +114,11 @@ def run_vacuum(table_dir: Path, retention_hours: int = 168) -> dict:
         }
     }
 
-    with open(commit_file, "w", encoding="utf-8") as f:
+    # Write atomic NDJSON commit via temporary file
+    tmp_commit_file = log_dir / f".tmp_{uuid.uuid4().hex}"
+    with open(tmp_commit_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(vacuum_action) + "\n")
+    os.replace(tmp_commit_file, commit_file)
 
     print(f"  [VACUUMED] Table '{table_dir.name}' -> Deleted {len(pruned_files)} expired files "
           f"(Retention: {retention_hours}h, Active files retained: {len(active_files)})")

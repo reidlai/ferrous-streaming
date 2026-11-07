@@ -85,8 +85,28 @@ class TestLakehouseMaintenance(unittest.TestCase):
         self.assertIn("remove", actions)
         self.assertIn("commitInfo", actions)
 
+    def test_optimize_empty_table_noop(self):
+        """OPTIMIZE on table with 0 parquet files is a no-op that creates no dummy commits."""
+        empty_table = self.temp_dir / "empty_table"
+        init_table(self.temp_dir, "empty_table", self.schema_file)
+        res = run_optimize(empty_table, target_mb=128)
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["files_removed"], 0)
+        self.assertEqual(res["files_added"], 0)
+        # No new commit created
+        self.assertFalse((empty_table / "_delta_log" / "00000000000000000001.json").exists())
+
+    def test_uninitialized_table_error(self):
+        """VACUUM and OPTIMIZE return errors on uninitialized tables."""
+        uninit = self.temp_dir / "uninit"
+        uninit.mkdir()
+        res_v = run_vacuum(uninit, 168)
+        self.assertEqual(res_v["status"], "error")
+        res_o = run_optimize(uninit, 128)
+        self.assertEqual(res_o["status"], "error")
+
     def test_vacuum_retention_pruning(self):
-        # 1. Add file then remove it via optimize
+        # 1. Add files then remove them via optimize
         dummy_old = self.table_dir / "old-part.parquet"
         dummy_old.write_bytes(b"old_data")
 
@@ -97,18 +117,55 @@ class TestLakehouseMaintenance(unittest.TestCase):
         eight_days_ago_ms = int((time.time() - (8 * 24 * 3600)) * 1000)
         commit_1 = self.table_dir / "_delta_log" / "00000000000000000001.json"
         
+        # Read commit lines, parse JSON, and set deletionTimestamp on remove action
+        lines = []
         with open(commit_1, "r", encoding="utf-8") as f:
-            content = f.read()
+            for l in f:
+                if l.strip():
+                    action = json.loads(l)
+                    if "remove" in action:
+                        action["remove"]["deletionTimestamp"] = eight_days_ago_ms
+                    lines.append(json.dumps(action))
 
-        # Update deletionTimestamp in commit to 8 days ago
-        content_aged = content.replace(str(int(time.time() * 1000))[:6], str(eight_days_ago_ms)[:6])
         with open(commit_1, "w", encoding="utf-8") as f:
-            f.write(content_aged)
+            f.write("\n".join(lines) + "\n")
 
         # Run vacuum with 168 hours (7 days) retention
         res = run_vacuum(self.table_dir, retention_hours=168)
         self.assertEqual(res["status"], "success")
         self.assertGreaterEqual(res["version"], 2)
+
+        # Verify old file was deleted from filesystem
+        self.assertFalse(dummy_old.exists())
+
+    def test_vacuum_unexpired_files_preserved(self):
+        """Files tombstoned within retention window (e.g. 1 day ago) must NOT be deleted."""
+        recent_part = self.table_dir / "recent-part.parquet"
+        recent_part.write_bytes(b"recent_data")
+
+        run_optimize(self.table_dir, target_mb=128)
+
+        # Modify deletionTimestamp to 24 hours ago (retention is 168h = 7 days)
+        one_day_ago_ms = int((time.time() - (24 * 3600)) * 1000)
+        commit_1 = self.table_dir / "_delta_log" / "00000000000000000001.json"
+        
+        lines = []
+        with open(commit_1, "r", encoding="utf-8") as f:
+            for l in f:
+                if l.strip():
+                    action = json.loads(l)
+                    if "remove" in action:
+                        action["remove"]["deletionTimestamp"] = one_day_ago_ms
+                    lines.append(json.dumps(action))
+
+        with open(commit_1, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+        res = run_vacuum(self.table_dir, retention_hours=168)
+        self.assertEqual(res["status"], "success")
+        # Recent tombstoned file must be preserved
+        self.assertTrue(recent_part.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

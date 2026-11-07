@@ -12,7 +12,9 @@ import http.server
 import importlib.util
 import json
 import os
+import shutil
 import socketserver
+import subprocess
 import sys
 import tempfile
 import threading
@@ -354,7 +356,7 @@ class TopicPartitioningUnitTests(unittest.TestCase):
                     os.environ["IGGY_HTTP_JWT_ENCODING_SECRET"] = old_val
 
     def test_11_shell_wrappers_parity(self):
-        """Verifies POSIX Bash and PowerShell wrappers exist and contain proper declarations."""
+        """Verifies POSIX Bash and PowerShell wrappers exist and execute --dry-run successfully."""
         sh_path = REPO_ROOT / "scripts" / "provision-topics.sh"
         ps1_path = REPO_ROOT / "scripts" / "provision-topics.ps1"
 
@@ -370,6 +372,29 @@ class TopicPartitioningUnitTests(unittest.TestCase):
         self.assertIn("[CmdletBinding()]", ps1_content)
         self.assertIn("provision-topics.py", ps1_content)
         self.assertIn("Push-Location $RepoRoot", ps1_content)
+
+        # Smoke-test execution of platform shell wrapper
+        if sys.platform == "win32":
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1_path), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"provision-topics.ps1 failed:\n{res.stderr}")
+            self.assertIn("Dry-run validation passed", res.stdout)
+        elif shutil.which("bash") or shutil.which("sh"):
+            sh_bin = shutil.which("bash") or shutil.which("sh")
+            res = subprocess.run(
+                [sh_bin, str(sh_path), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"provision-topics.sh failed:\n{res.stderr}")
+            self.assertIn("Dry-run validation passed", res.stdout)
 
     def test_12_live_broker_partitioning_if_available(self):
         """Executes full topic provisioning against live Iggy broker container if active."""

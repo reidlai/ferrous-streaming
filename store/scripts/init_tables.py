@@ -30,7 +30,7 @@ ARROW_TO_DELTA_TYPE = {
     "timestamp": "timestamp"
 }
 
-def convert_arrow_to_delta_schema(arrow_json_path: Path) -> tuple[str, list[str]]:
+def convert_arrow_to_delta_schema(arrow_json_path: Path) -> tuple[str, list[str], dict]:
     """Converts Arrow JSON schema format to Delta Lake struct schemaString."""
     with open(arrow_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -38,7 +38,7 @@ def convert_arrow_to_delta_schema(arrow_json_path: Path) -> tuple[str, list[str]
     fields = []
     for f in data.get("fields", []):
         f_name = f["name"]
-        raw_type = f["type"]
+        raw_type = f.get("type", {})
         type_name = raw_type.get("name", "utf8")
         delta_type = ARROW_TO_DELTA_TYPE.get(type_name, "string")
         
@@ -47,6 +47,9 @@ def convert_arrow_to_delta_schema(arrow_json_path: Path) -> tuple[str, list[str]
             delta_type = "integer"
         elif type_name == "int" and raw_type.get("bitWidth") == 64:
             delta_type = "long"
+        elif type_name == "floatingpoint":
+            precision = str(raw_type.get("precision", "DOUBLE")).upper()
+            delta_type = "float" if precision == "SINGLE" else "double"
             
         fields.append({
             "name": f_name,
@@ -59,8 +62,9 @@ def convert_arrow_to_delta_schema(arrow_json_path: Path) -> tuple[str, list[str]
         "type": "struct",
         "fields": fields
     }
-    partition_keys = data.get("metadata", {}).get("partition_keys", [])
-    return json.dumps(delta_struct, separators=(",", ":")), partition_keys
+    schema_meta = data.get("metadata", {})
+    partition_keys = schema_meta.get("partition_keys", [])
+    return json.dumps(delta_struct, separators=(",", ":")), partition_keys, schema_meta
 
 def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
     """Initializes a single Delta Lake table directory with _delta_log."""
@@ -69,11 +73,21 @@ def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
     commit_file = log_dir / "00000000000000000000.json"
 
     if commit_file.exists():
-        print(f"  [SKIPPED] Table '{table_name}' already initialized at {table_dir}")
-        return False
+        try:
+            if commit_file.stat().st_size > 0:
+                with open(commit_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            json.loads(line)
+                print(f"  [SKIPPED] Table '{table_name}' already initialized at {table_dir}")
+                return False
+            else:
+                print(f"  [RECOVERY] Empty commit file detected for '{table_name}', re-initializing...")
+        except Exception:
+            print(f"  [RECOVERY] Corrupted commit file detected for '{table_name}', re-initializing...")
 
     log_dir.mkdir(parents=True, exist_ok=True)
-    schema_string, partition_cols = convert_arrow_to_delta_schema(schema_file)
+    schema_string, partition_cols, schema_meta = convert_arrow_to_delta_schema(schema_file)
     now_ms = int(time.time() * 1000)
 
     # 1. Delta Protocol Action
@@ -83,6 +97,8 @@ def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
             "minWriterVersion": 2
         }
     }
+
+    append_only = schema_meta.get("delta.appendOnly", "true" if ("events" in table_name or "benchmarks" in table_name) else "false")
 
     # 2. Delta MetaData Action
     metadata_action = {
@@ -96,13 +112,20 @@ def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
             "schemaString": schema_string,
             "partitionColumns": partition_cols,
             "configuration": {
-                "delta.appendOnly": "true" if "events" in table_name or "benchmarks" in table_name else "false",
+                "delta.appendOnly": str(append_only).lower(),
                 "delta.autoOptimize.autoCompact": "true",
                 "delta.autoOptimize.optimizeWrite": "true"
             },
             "createdTime": now_ms
         }
     }
+
+    # Use portable repo-relative or directory path for location metadata
+    try:
+        rel_path = table_dir.relative_to(REPO_ROOT)
+        portable_location = str(rel_path.as_posix())
+    except ValueError:
+        portable_location = str(table_dir.as_posix())
 
     # 3. Delta CommitInfo Action
     commit_info_action = {
@@ -111,11 +134,11 @@ def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
             "operation": "CREATE TABLE",
             "operationParameters": {
                 "isManaged": "false",
-                "location": str(table_dir.as_posix()),
+                "location": portable_location,
                 "partitionBy": json.dumps(partition_cols)
             },
             "engineInfo": "ferrous-lakehouse-initializer/1.0.0",
-            "readVersion": -1,
+            "readVersion": 0,
             "isolationLevel": "Serializable"
         }
     }
@@ -127,8 +150,11 @@ def init_table(data_dir: Path, table_name: str, schema_file: Path) -> bool:
         json.dumps(commit_info_action)
     ]
 
-    with open(commit_file, "w", encoding="utf-8") as f:
+    # Write atomically via temp file to avoid partial commit writes
+    tmp_commit_file = log_dir / f".tmp_{uuid.uuid4().hex}"
+    with open(tmp_commit_file, "w", encoding="utf-8") as f:
         f.write("\n".join(commit_lines) + "\n")
+    os.replace(tmp_commit_file, commit_file)
 
     print(f"  [INITIALIZED] Table '{table_name}' -> {commit_file}")
     return True

@@ -15,6 +15,7 @@ Verifies:
 
 import importlib.util
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -230,7 +231,9 @@ class TestBrokerSecurity(unittest.TestCase):
             "Must declare IGGY_HTTP_JWT_ENCODING_SECRET or IGGY_HTTP_JWT_SECRET",
         )
         self.assertIn("STREAMING_SERVICE_ACCOUNT", content, "Must declare STREAMING_SERVICE_ACCOUNT")
-        self.assertIn('user: "10001:10001"', content, "Must enforce non-root UID 10001")
+        self.assertIn("iggy-broker:", content)
+        broker_section = content.split("iggy-broker:", 1)[1].split("ports:", 1)[0]
+        self.assertIn('user: "10001:10001"', broker_section, "iggy-broker must explicitly enforce non-root UID 10001")
         self.assertIn("cap_drop:", content, "Must drop capabilities")
 
     def test_05_jwt_generation_and_claims_verification(self):
@@ -360,7 +363,7 @@ class TestBrokerSecurity(unittest.TestCase):
         self.assertTrue(success, "Live broker administrative security verification failed")
 
     def test_13_shell_wrappers_existence(self):
-        """Assertion 13: Cross-platform shell wrappers exist and have non-empty content."""
+        """Assertion 13: Cross-platform shell wrappers exist and execute successfully with --dry-run."""
         sh_script = SCRIPTS_DIR / "verify-admin-auth.sh"
         ps1_script = SCRIPTS_DIR / "verify-admin-auth.ps1"
         self.assertTrue(sh_script.exists(), f"Missing {sh_script}")
@@ -368,14 +371,35 @@ class TestBrokerSecurity(unittest.TestCase):
         self.assertGreater(sh_script.stat().st_size, 50)
         self.assertGreater(ps1_script.stat().st_size, 50)
 
+        # Smoke-test execution of platform shell wrapper
+        if sys.platform == "win32":
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1_script), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"verify-admin-auth.ps1 failed:\n{res.stderr}")
+            self.assertIn("Dry-Run Security Verification Passed", res.stdout)
+        elif shutil.which("bash") or shutil.which("sh"):
+            sh_bin = shutil.which("bash") or shutil.which("sh")
+            res = subprocess.run(
+                [sh_bin, str(sh_script), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"verify-admin-auth.sh failed:\n{res.stderr}")
+            self.assertIn("Dry-Run Security Verification Passed", res.stdout)
+
     def test_14_run_live_verification_against_mock_server(self):
-        """Assertion 14: run_live_verification succeeds against active MockIggyHttpHandler."""
-        valid_token = generate_service_account_token(
-            service_account="svc_ferrous_streaming",
+        """Assertion 14: run_live_verification derives token and succeeds against active MockIggyHttpHandler."""
+        success = run_live_verification(
+            base_url=self.mock_url,
             secret="mock_test_secret_32bytes_long_key!!",
-            expiry_seconds=3600,
         )
-        success = run_live_verification(base_url=self.mock_url, token=valid_token)
         self.assertTrue(success, "run_live_verification failed against mock server")
 
 

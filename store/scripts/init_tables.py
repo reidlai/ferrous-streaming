@@ -25,6 +25,7 @@ ARROW_TO_DELTA_TYPE = {
     "utf8": "string",
     "bool": "boolean",
     "double": "double",
+    "floatingpoint": "double",
     "int": "long",
     "timestamp": "timestamp"
 }

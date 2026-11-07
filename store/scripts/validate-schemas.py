@@ -19,10 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PII_FORBIDDEN_PATTERNS = [
     r"\bcpf\b",
     r"\bcredit_card\b",
+    r"\bcreditcard\b",
     r"\bcard_number\b",
     r"\bcvv\b",
     r"\bcustomer_email\b",
     r"\bemail_address\b",
+    r"\bemail\b",
     r"\bpassword\b",
     r"\bsecret\b"
 ]
@@ -37,6 +39,21 @@ REQUIRED_TABLES = {
     "llm_benchmarks": [
         "run_id", "model_id", "provider", "ttft_us", "tps", "itl_jitter_us",
         "tool_call_valid", "domain_invariant_valid", "pii_masked", "timestamp_utc"
+    ],
+    "olist_orders": [
+        "order_id", "customer_id", "order_status", "order_purchase_timestamp"
+    ],
+    "olist_order_items": [
+        "order_id", "order_item_id", "product_id", "seller_id", "price"
+    ],
+    "olist_reviews": [
+        "review_id", "order_id", "review_score"
+    ],
+    "olist_customers": [
+        "customer_id", "customer_unique_id", "customer_city", "customer_state"
+    ],
+    "olist_payments": [
+        "order_id", "payment_sequential", "payment_type", "payment_value"
     ]
 }
 
@@ -58,7 +75,10 @@ def validate_arrow_schema(json_path: Path, table_name: str) -> list:
     except Exception as exc:
         return [f"Invalid JSON in {json_path}: {exc}"]
     
-    fields = [f.get("name") for f in data.get("fields", [])]
+    if not isinstance(data, dict):
+        return [f"Root of Arrow schema in {json_path} must be a JSON object"]
+    
+    fields = [f.get("name") for f in data.get("fields", []) if isinstance(f, dict) and "name" in f]
     expected_fields = REQUIRED_TABLES.get(table_name, [])
     for exp in expected_fields:
         if exp not in fields:
@@ -109,7 +129,13 @@ def main() -> int:
     all_errors.extend(validate_sql_ddl(llm_sql, "llm_benchmarks"))
     all_errors.extend(validate_arrow_schema(llm_arrow, "llm_benchmarks"))
 
-    # 4. Report results
+    # 4. Validate Historical Tables (SQL DDL)
+    historical_dir = schemas_dir / "historical"
+    for table in ["olist_orders", "olist_order_items", "olist_reviews", "olist_customers", "olist_payments"]:
+        sql_file = historical_dir / f"{table}.sql"
+        all_errors.extend(validate_sql_ddl(sql_file, table))
+
+    # 5. Report results
     if all_pii_violations:
         print("\n❌ PII AUDIT FAILED:")
         for v in all_pii_violations:

@@ -12,7 +12,9 @@ import http.server
 import importlib.util
 import json
 import os
+import shutil
 import socketserver
+import subprocess
 import sys
 import threading
 import time
@@ -325,7 +327,7 @@ class ConsumerGroupsUnitTests(unittest.TestCase):
             ensure_consumer_group(self.base_url, token="invalid_token", stream_id=1, topic_id=1, group_id=1, group_name="x")
 
     def test_07_shell_wrappers_parity(self):
-        """Verifies POSIX Bash and PowerShell wrappers exist and contain proper declarations."""
+        """Verifies POSIX Bash and PowerShell wrappers exist and execute --dry-run successfully."""
         sh_path = REPO_ROOT / "scripts" / "provision-consumer-groups.sh"
         ps1_path = REPO_ROOT / "scripts" / "provision-consumer-groups.ps1"
 
@@ -339,6 +341,29 @@ class ConsumerGroupsUnitTests(unittest.TestCase):
         ps1_content = ps1_path.read_text(encoding="utf-8")
         self.assertIn("[CmdletBinding()]", ps1_content)
         self.assertIn("provision-consumer-groups.py", ps1_content)
+
+        # Smoke-test execution of platform shell wrapper
+        if sys.platform == "win32":
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1_path), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"provision-consumer-groups.ps1 failed:\n{res.stderr}")
+            self.assertIn("Dry-run validation passed", res.stdout)
+        elif shutil.which("bash") or shutil.which("sh"):
+            sh_bin = shutil.which("bash") or shutil.which("sh")
+            res = subprocess.run(
+                [sh_bin, str(sh_path), "--dry-run"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(res.returncode, 0, f"provision-consumer-groups.sh failed:\n{res.stderr}")
+            self.assertIn("Dry-run validation passed", res.stdout)
 
     def test_08_cg_arroyo_state_provisioning_on_consolidated_topic(self):
         """Validates cg-arroyo-state is provisioned on stream 1, topic 2 (consolidated)."""

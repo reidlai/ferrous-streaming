@@ -24,3 +24,23 @@ append_only = true
 path = "data/delta/olist_orders"
 partition_by = ["order_status"]
 append_only = false
+
+[tables.olist_order_items]
+path = "data/delta/olist_order_items"
+partition_by = []
+append_only = false
+
+[tables.olist_reviews]
+path = "data/delta/olist_reviews"
+partition_by = []
+append_only = false
+
+[tables.olist_customers]
+path = "data/delta/olist_customers"
+partition_by = ["customer_state"]
+append_only = false
+
+[tables.olist_payments]
+path = "data/delta/olist_payments"
+partition_by = ["payment_type"]
+append_only = false

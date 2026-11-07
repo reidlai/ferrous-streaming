@@ -1,7 +1,7 @@
 # PowerShell Runner for ferrous-lakehouse schema validation
 $ErrorActionPreference = "Stop"
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $RepoRoot = Split-Path -Parent $ScriptDir
 
 Write-Host "==> Running ferrous-lakehouse schema validation..." -ForegroundColor Cyan

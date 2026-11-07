@@ -103,6 +103,9 @@ def decode_and_verify_jwt(
     except Exception as e:
         raise ValueError(f"Malformed JWT header: {e}")
 
+    if not isinstance(header, dict):
+        raise ValueError("Malformed JWT header: expected JSON object")
+
     if header.get("alg") != "HS256":
         raise ValueError(f"Unsupported JWT algorithm '{header.get('alg')}': expected 'HS256'.")
 
@@ -111,7 +114,15 @@ def decode_and_verify_jwt(
     except Exception as e:
         raise ValueError(f"Malformed JWT payload: {e}")
 
+    if not isinstance(payload, dict):
+        raise ValueError("Malformed JWT payload: expected JSON object")
+
     now = int(time.time())
+
+    # Not-before check
+    nbf = payload.get("nbf")
+    if nbf is not None and now < int(nbf):
+        raise ValueError(f"Token not yet valid: nbf={nbf}, current_time={now}")
 
     # Expiration check
     exp = payload.get("exp")
@@ -252,10 +263,13 @@ def validate_env_blueprint(env_example_path: Path) -> dict:
     # Check Secret Zero masking
     token_val = found.get("STREAMING_SERVICE_TOKEN", "")
     secret_val = found.get(jwt_secret_key, "")
+    dec_secret_val = found.get("IGGY_HTTP_JWT_DECODING_SECRET", "")
     if "********" not in token_val and "<REPLACE" not in token_val:
         raise ValueError("STREAMING_SERVICE_TOKEN in .env.example must be masked with placeholder.")
     if "********" not in secret_val and "<REPLACE" not in secret_val:
         raise ValueError(f"{jwt_secret_key} in .env.example must be masked with placeholder.")
+    if dec_secret_val and "********" not in dec_secret_val and "<REPLACE" not in dec_secret_val:
+        raise ValueError("IGGY_HTTP_JWT_DECODING_SECRET in .env.example must be masked with placeholder.")
 
     return found
 
@@ -433,33 +447,36 @@ def run_live_verification(
 
     # 4. Probe valid token on protected endpoint: GET /metrics
     print("\n[Probe 4/4] Probing protected endpoint with valid administrative Bearer token...")
-    valid_token = token
+    valid_token = token or os.environ.get("STREAMING_SERVICE_TOKEN")
     if not valid_token:
-        # Attempt to obtain token from broker using default root credentials or login
-        print("  --> No token supplied. Requesting session token from Iggy root user (/users/login)...")
-        login_data = json.dumps({"username": "iggy", "password": "iggy"}).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        try:
-            status, body, _ = request_http(
-                f"{base_url}/users/login",
-                method="POST",
-                data=login_data,
-                headers=headers,
-            )
-            if status == 200:
-                resp_json = json.loads(body)
-                valid_token = resp_json.get("access_token", {}).get("token")
-                print(f"  --> Obtained active administrative token from broker: {valid_token[:20]}...")
-            else:
-                print(f"  --> Root login unavailable (HTTP {status}): Generating local service token...")
-        except Exception as e:
-            print(f"  --> Unable to call /users/login: {e}")
+        # Check if root credentials are provided via environment to obtain session token
+        root_user = os.environ.get("IGGY_ROOT_USERNAME", "iggy")
+        root_pass = os.environ.get("IGGY_ROOT_PASSWORD")
+        if root_pass:
+            print(f"  --> Requesting session token from Iggy root user '{root_user}' (/users/login)...")
+            login_data = json.dumps({"username": root_user, "password": root_pass}).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            try:
+                status, body, _ = request_http(
+                    f"{base_url}/users/login",
+                    method="POST",
+                    data=login_data,
+                    headers=headers,
+                )
+                if status == 200:
+                    resp_json = json.loads(body)
+                    tok = resp_json.get("access_token")
+                    valid_token = tok if isinstance(tok, str) else (tok or {}).get("token")
+                    if valid_token:
+                        print(f"  --> Obtained active administrative token from broker: {valid_token[:20]}...")
+            except Exception as e:
+                print(f"  --> Unable to call /users/login: {e}")
 
     if not valid_token:
         signing_secret = (
             secret
-            or os.environ.get("IGGY_HTTP_JWT_DECODING_SECRET")
             or os.environ.get("IGGY_HTTP_JWT_ENCODING_SECRET")
+            or os.environ.get("IGGY_HTTP_JWT_DECODING_SECRET")
             or os.environ.get("IGGY_HTTP_JWT_SECRET")
             or "ferrous_default_secret_for_local_testing"
         )
@@ -486,6 +503,26 @@ def run_live_verification(
     print(" [SUCCESS] All Live Security Probes Passed Successfully!             ")
     print("=====================================================================\n")
     return True
+
+
+def load_env_file(env_file_path: Path) -> None:
+    """Loads environment variables from .env file into os.environ if not already set."""
+    if not env_file_path.exists():
+        return
+    try:
+        content = env_file_path.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
 
 
 def main() -> int:
@@ -533,13 +570,18 @@ def main() -> int:
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent
 
+    # Auto-load .env if present in repository root
+    env_file = repo_root / DEFAULT_ENV_FILE
+    load_env_file(env_file)
+
     def resolve_path(p_str: str) -> Path:
         p = Path(p_str)
         if p.is_absolute():
             return p
-        if p.exists():
-            return p.resolve()
-        return (repo_root / p).resolve()
+        repo_candidate = (repo_root / p).resolve()
+        if repo_candidate.exists():
+            return repo_candidate
+        return p.resolve()
 
     config_path = resolve_path(args.config)
     env_example_path = resolve_path(args.env_example)

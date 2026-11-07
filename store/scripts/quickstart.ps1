@@ -1,7 +1,8 @@
 # PowerShell Quickstart for ferrous-lakehouse (<3 minutes)
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $RepoRoot = Split-Path -Parent $ScriptDir
 
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -25,10 +26,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Step 4: Test Maintenance Operations
 Write-Host "--> [4/4] Verifying Maintenance Automation..." -ForegroundColor Yellow
-python "$ScriptDir/optimize.py" --table orders_current_state
+python "$ScriptDir/optimize.py" --table orders_current_state --data-dir "$RepoRoot/data/delta"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-python "$ScriptDir/vacuum.py" --table orders_current_state --retention-hours 168
+python "$ScriptDir/vacuum.py" --table orders_current_state --retention-hours 168 --data-dir "$RepoRoot/data/delta"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "============================================================" -ForegroundColor Green

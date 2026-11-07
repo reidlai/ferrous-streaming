@@ -31,13 +31,18 @@ DEFAULT_ENV_FILE = ".env"
 DEFAULT_ENV_EXAMPLE = ".env.example"
 
 
-def check_and_create_storage(data_dir_path: Path) -> bool:
+def check_and_create_storage(data_dir_path: Path, dry_run: bool = False) -> bool:
     """Verifies that the WAL storage directory exists, creating it if missing."""
+    if data_dir_path.exists() and not data_dir_path.is_dir():
+        raise NotADirectoryError(f"Storage path '{data_dir_path}' exists on host but is not a directory.")
     if not data_dir_path.exists():
-        print(f"[WARN] Storage directory '{data_dir_path}' does not exist on host. Auto-creating directory (0755)...")
+        if dry_run:
+            print(f"[WARN] Storage directory '{data_dir_path}' does not exist on host (would be created: 0777).")
+            return False
+        print(f"[WARN] Storage directory '{data_dir_path}' does not exist on host. Auto-creating directory (0777)...")
         data_dir_path.mkdir(parents=True, exist_ok=True)
         try:
-            os.chmod(data_dir_path, 0o755)
+            os.chmod(data_dir_path, 0o777)
         except OSError:
             pass
         return True
@@ -65,17 +70,17 @@ def validate_config(config_path: Path) -> dict:
 
     # Validate TCP port 8090
     tcp_addr = cfg.get("tcp", {}).get("address", "")
-    if "8090" not in tcp_addr:
+    if not tcp_addr.endswith(":8090"):
         raise ValueError(f"Invalid iggy.toml: Expected port 8090 for TCP binary protocol, got tcp='{tcp_addr}'.")
 
     # Validate HTTP port 3000
     http_addr = cfg.get("http", {}).get("address", "")
-    if "3000" not in http_addr:
+    if not http_addr.endswith(":3000"):
         raise ValueError(f"Invalid iggy.toml: Expected port 3000 for HTTP management API, got http='{http_addr}'.")
 
     # Validate Kafka port 9092 (optional in iggy.toml; gateway runs as Kafka protocol bridge)
     kafka_addr = cfg.get("kafka", {}).get("address", "")
-    if kafka_addr and "9092" not in kafka_addr:
+    if kafka_addr and not kafka_addr.endswith(":9092"):
         raise ValueError(f"Invalid iggy.toml: Expected port 9092 for Kafka gateway, got '{kafka_addr}'.")
 
     return cfg
@@ -155,32 +160,40 @@ def main() -> int:
     print("[PRE-FLIGHT] Checking Apache Iggy Broker Scaffolding...")
 
     # 1. Check & create storage directory
-    check_and_create_storage(data_dir_path)
-    print(f"[OK] Persistent WAL storage directory verified: {data_dir_path}")
+    try:
+        check_and_create_storage(data_dir_path, dry_run=args.dry_run)
+        print(f"[OK] Persistent WAL storage directory verified: {data_dir_path}")
+    except Exception as e:
+        print(f"[ERROR] Storage verification failed: {e}", file=sys.stderr)
+        return 1
 
     # 2. Parse & validate configuration
     try:
         cfg = validate_config(config_path)
+        kafka_info = f", Kafka: {cfg.get('kafka', {}).get('address')}" if cfg.get('kafka') else ""
         print(
             f"[OK] Configuration valid: {config_path.name} "
-            f"(TCP: 8090, HTTP: 3000, Kafka: 9092, Path: {cfg.get('path')}, Advertised: {cfg.get('node', {}).get('advertised_address')})"
+            f"(TCP: 8090, HTTP: 3000{kafka_info}, Path: {cfg.get('path')}, Advertised: {cfg.get('node', {}).get('advertised_address')})"
         )
     except Exception as e:
         print(f"[ERROR] Configuration validation failed: {e}", file=sys.stderr)
         return 1
 
     # 3. Check environment file
+    if args.env_file and args.env_file != DEFAULT_ENV_FILE and not env_path.exists():
+        print(f"[ERROR] Specified environment file '{env_path}' not found.", file=sys.stderr)
+        return 1
     check_env(env_path, env_example_path)
 
     # 4. Check port availability for 8090, 3000, and 9092
     has_conflict = False
     ports_to_check = [
-        (8090, "native TCP transport"),
-        (3000, "HTTP management and metrics API"),
-        (9092, "Iggy-Kafka bridge (host loopback listener)"),
+        ("0.0.0.0", 8090, "native TCP transport"),
+        ("0.0.0.0", 3000, "HTTP management and metrics API"),
+        ("127.0.0.1", 9092, "Iggy-Kafka bridge (host loopback listener)"),
     ]
-    for port, desc in ports_to_check:
-        ok, err = check_port_availability("127.0.0.1", port)
+    for host, port, desc in ports_to_check:
+        ok, err = check_port_availability(host, port)
         if not ok:
             print(f"[ERROR] {err}", file=sys.stderr)
             has_conflict = True
@@ -209,7 +222,7 @@ def main() -> int:
         cmd = ["docker", "compose", "-f", str(compose_file)]
         if args.env_file and env_path.exists():
             cmd.extend(["--env-file", str(env_path)])
-        cmd.extend(["up", "-d"])
+        cmd.extend(["up", "-d", "iggy-broker"])
         res = subprocess.run(cmd, cwd=str(repo_root), check=True)
         print("[SUCCESS] Apache Iggy broker container started successfully.")
         return res.returncode

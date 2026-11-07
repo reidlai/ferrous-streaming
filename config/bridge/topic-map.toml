@@ -5,6 +5,10 @@
 
 default_stream = "kafka"
 
+[topics."benchmark.hpc_mqbench"]
+stream = "benchmark"
+topic  = "hpc_mqbench"
+
 [topics."olist.orders_stream"]
 stream = "olist"
 topic  = "orders_stream"

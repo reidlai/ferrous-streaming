@@ -122,9 +122,37 @@ The Delta Lake table definitions, retention config, and `init-tables` / `optimiz
 
 ---
 
-## HPC Benchmark (`benchmark/`, planned)
+## HPC Benchmark (`benchmark/`)
 
-The platform's high-performance benchmark is public and lives here, based on the workload and method of **HPC-MQBench**. It measures the FerrousCX platform end to end, and a run counts only when every record is accounted for. It uses the generic `stream-replay-rs` as its load driver (the `ferrous-cx` load profile, `--rate 25`, or a rate set by the benchmark) and holds no benchmark knowledge in the replayer.
+The platform's high-performance benchmark is public and lives here, based on the workload and method of **HPC-MQBench** (Mahmoodian and Kunkel, arXiv:2610.09786; FR-32, FR-33, OQ-9). It measures the FerrousCX platform end to end across all ingestion stages, and a run counts only when every record is accounted for (**qualification-first** reporting).
+
+It uses the generic `stream-replay-rs` as its load driver (with a fixed-rate profile `--rate 25`, or a benchmark-configured rate) and publishes through the Iggy–Kafka bridge (`localhost:9092`), with zero dataset bundling. The benchmark topic is `benchmark.hpc_mqbench` (defined in `ferrous-cx/contracts/topics.yml`), while `ferrous-streaming` owns only the workload parameters (`benchmark/workload.toml`).
+
+### Running the Benchmark
+
+```bash
+# 1. Ensure stream-replay-rs CLI is installed
+cargo install stream-replay-rs # or cargo install --path ../stream-replay-rs
+
+# 2. Run the synthetic workload generator
+python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
+
+# 3. Inject workload at fixed rate through the Iggy-Kafka bridge and run qualification verification
+python benchmark/run_hpc_benchmark.py --count 1000 --rate 25 --payload-size 1024
+```
+
+### Qualification-First Reporting & Bridge Hop Overhead
+
+A run is reported only when:
+$$N_{\text{sent}} = N_{\text{bridge}} = N_{\text{iggy}} = N_{\text{arroyo}} = N_{\text{delta}}$$
+
+with zero dropped records and zero duplicates. Runs that drop packets or suffer regressions are marked **`DISQUALIFIED`** or **`OVERDRIVEN`** and are not ranked.
+
+The qualification report explicitly isolates and measures the **extra hop latency introduced by the Iggy–Kafka bridge** (OQ-9):
+* **Bridge Hop Latency:** Client send to bridge wire ingestion ($p_{50}$, $p_{95}$, $p_{99}$).
+* **Iggy Commit Latency:** Bridge to Iggy write-ahead log fsync ($<1\text{ms}$ per NFR-2).
+* **Arroyo Stream Latency:** Arroyo stream processor window processing ($<500\text{ms}$ per NFR-6).
+* **Delta Lake 2PC Latency:** Parquet micro-batch ACID commit.
 
 Published third-party broker figures, with their conditions and caveats, are kept in [`docs/published-broker-figures.md`](docs/published-broker-figures.md). They are not results of this benchmark.
 

@@ -6,3 +6,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY_SCRIPT="${SCRIPT_DIR}/deploy-pipeline-olist-ingestion.py"
 
 python3 "${PY_SCRIPT}" "$@"
+

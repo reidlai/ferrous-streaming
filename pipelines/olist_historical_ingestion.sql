@@ -50,3 +50,4 @@ SELECT
     order_delivered_customer_date,
     order_estimated_delivery_date
 FROM olist_orders_stream_source;
+

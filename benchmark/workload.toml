@@ -1,0 +1,48 @@
+# HPC-MQBench Workload Parameters (Story 3.11, FR-32)
+# Owns benchmark workload parameters for FerrousCX platform ingestion.
+# Single source of truth for benchmark payload profiles, partition counts, and rates.
+
+[benchmark]
+name = "ferrouscx-hpc-mqbench"
+description = "Reproducible end-to-end platform ingestion benchmark based on HPC-MQBench method"
+version = "1.0.0"
+
+[topic]
+stream = "benchmark"
+topic = "hpc_mqbench"
+kafka_name = "benchmark.hpc_mqbench"
+partitions = 4
+durability = "persisted"
+consumer_group = "cg-arroyo-benchmark"
+
+[profiles.small_control]
+description = "High-frequency low-overhead control profile"
+payload_size_bytes = 256
+target_rates = [25, 100, 500, 1000]
+default_record_count = 5000
+
+[profiles.standard_1kb]
+description = "Standard HPC payload model"
+payload_size_bytes = 1024
+target_rates = [25, 100, 250, 500]
+default_record_count = 2500
+
+[profiles.large_burst]
+description = "Heavy packet burst payload model"
+payload_size_bytes = 4096
+target_rates = [25, 50, 100]
+default_record_count = 1000
+
+[reconciliation]
+method = "qualification_first"
+stages = [
+    "client_send",
+    "bridge_ingress",
+    "iggy_broker_fsync",
+    "arroyo_stream_process",
+    "delta_lake_2pc_store"
+]
+disqualify_on_loss = true
+disqualify_on_duplicate = true
+report_bridge_latency = true
+

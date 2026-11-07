@@ -87,11 +87,10 @@ class TestTopicMap(unittest.TestCase):
             pairs.append((target["stream"], target["topic"]))
         self.assertEqual(len(pairs), len(set(pairs)), "two Kafka names must not point at one Iggy topic")
 
-    def test_03_exactly_the_three_platform_topics(self):
-        self.assertEqual(
-            set(load_map()["topics"]),
-            {"orders.intake", "orders.consolidated", "olist.orders_stream"},
-        )
+    def test_03_platform_and_benchmark_topics(self):
+        topics = set(load_map()["topics"])
+        expected = {"orders.intake", "orders.consolidated", "olist.orders_stream", "benchmark.hpc_mqbench"}
+        self.assertEqual(topics, expected)
 
     def test_04_orders_topics_match_the_topic_provisioner(self):
         cfg = load_map()

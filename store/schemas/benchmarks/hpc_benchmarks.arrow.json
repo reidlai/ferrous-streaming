@@ -1,0 +1,87 @@
+{
+  "fields": [
+    {
+      "name": "run_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "UUIDv7 benchmark run identifier" }
+    },
+    {
+      "name": "record_id",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Distinct record identity for deduplication" }
+    },
+    {
+      "name": "seq",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Replay sequence number" }
+    },
+    {
+      "name": "payload_size_bytes",
+      "type": { "name": "int", "bitWidth": 32, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Workload payload size in bytes" }
+    },
+    {
+      "name": "partition",
+      "type": { "name": "int", "bitWidth": 32, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Stream partition index (0..3)" }
+    },
+    {
+      "name": "status",
+      "type": { "name": "utf8" },
+      "nullable": false,
+      "metadata": { "description": "Qualification state: QUALIFIED, OVERDRIVEN, INVALID" }
+    },
+    {
+      "name": "client_timestamp_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Client emit timestamp in microseconds" }
+    },
+    {
+      "name": "bridge_hop_latency_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Iggy-Kafka bridge extra hop latency in microseconds" }
+    },
+    {
+      "name": "iggy_latency_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Iggy broker commit latency in microseconds" }
+    },
+    {
+      "name": "arroyo_latency_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Arroyo stream processing latency in microseconds" }
+    },
+    {
+      "name": "delta_latency_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "Delta Lake 2PC commit latency in microseconds" }
+    },
+    {
+      "name": "e2e_latency_us",
+      "type": { "name": "int", "bitWidth": 64, "isSigned": true },
+      "nullable": false,
+      "metadata": { "description": "End-to-end latency in microseconds" }
+    },
+    {
+      "name": "timestamp_utc",
+      "type": { "name": "timestamp", "unit": "MICROSECOND", "timezone": "UTC" },
+      "nullable": false,
+      "metadata": { "description": "Benchmark run timestamp (micros UTC)" }
+    }
+  ],
+  "metadata": {
+    "table_name": "hpc_benchmarks",
+    "partition_keys": ["status"]
+  }
+}
+

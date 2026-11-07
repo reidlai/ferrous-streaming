@@ -6,8 +6,7 @@
 
 [![Component Type: Delta Lake Storage Tier](https://img.shields.io/badge/component-Delta%20Lake%20Storage-blue.svg)](https://github.com/reidlai/ferrous-cx)
 [![Standard: Delta Lake 0.20](https://img.shields.io/badge/standard-Delta%20Lake%20(delta--rs)-orange.svg)](https://delta.io/)
-[![DevSecOps CI: Tier 2](https://img.shields.io/badge/DevSecOps%20CI-Tier%202%20Passing-brightgreen.svg)](.github/workflows/devsecops-infra-ci.yml)
-[![Pre-Commit Enabled](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](.pre-commit-config.yaml)
+[![Pre-Commit Enabled](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](../.pre-commit-config.yaml)
 
 **`ferrous-lakehouse`** is the dedicated Open Lakehouse storage and schema catalog submodule for the **FerrousCX** enterprise platform. Built on the **Delta Lake (`delta-rs` / `delta-lake-rs`)** open table format, `ferrous-lakehouse` provides ACID transactional guarantees, versioned audit histories (`_delta_log/`), time-travel capabilities, and zero-copy Apache Arrow vectorized scans across all streaming and historical dataset partitions.
 
@@ -109,7 +108,7 @@ chmod +x ./scripts/*.sh
 - **PowerShell**: `.\scripts\init-tables.ps1`
 - **Bash**: `./scripts/init-tables.sh`
 
-#### Step 3: Run Authenticated Compaction (OPTIMIZE)
+#### Step 3: Run Compaction (OPTIMIZE)
 - **PowerShell**: `.\scripts\optimize.ps1 -Table orders_current_state -TargetMB 128`
 - **Bash**: `./scripts/optimize.sh orders_current_state 128`
 
@@ -121,36 +120,37 @@ chmod +x ./scripts/*.sh
 
 ## 🐳 Containerized Orchestration (Docker Compose)
 
-The `ferrous-lakehouse` service runs as a hardened rootless container (UID 10001) that automatically scaffolds Delta tables on boot and manages recurring OPTIMIZE and VACUUM maintenance cycles.
+The `delta-store` service runs as a hardened rootless container (UID 10001) defined in the parent `ferrous-streaming/docker-compose.yml` that automatically scaffolds Delta tables on boot and manages recurring OPTIMIZE and VACUUM maintenance cycles.
 
 ### Step 1: Launch the Lakehouse Container Service
 
 #### Windows (PowerShell) & Linux / macOS (Bash)
 ```bash
-docker compose up -d
+# Run from parent ferrous-streaming/ directory:
+docker compose up -d delta-store
 ```
 
 ### Step 2: Verify Container Health & Status
-Check that the container reports `healthy`:
+Check that the container reports `Up`:
 ```bash
-docker ps --filter "name=ferrous-lakehouse"
+docker ps --filter "name=ferrous-delta-store"
 ```
 
 Expected output:
 ```text
-CONTAINER ID   IMAGE                      STATUS                    NAMES
-2b684d494610   ferrous-lakehouse:latest   Up 2 minutes (healthy)   ferrous-lakehouse
+CONTAINER ID   IMAGE                          STATUS         NAMES
+2b684d494610   ferrous-streaming-store:latest Up 2 minutes   ferrous-delta-store
 ```
 
 ### Step 3: Inspect Lifecycle Logs
 Monitor the automated initialization and recurring maintenance loops:
 ```bash
-docker logs -f ferrous-lakehouse
+docker logs -f ferrous-delta-store
 ```
 
 ### Step 4: Stop the Lakehouse Service
 ```bash
-docker compose down
+docker compose stop delta-store
 ```
 
 ---

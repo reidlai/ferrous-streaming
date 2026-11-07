@@ -78,3 +78,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: test-store-units
+        name: Execute Delta Store Unit Tests (store/tests/)
+        entry: python -m unittest discover store/tests
+        language: system
+        pass_filenames: false
+        always_run: true

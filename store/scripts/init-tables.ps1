@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $RepoRoot = Split-Path -Parent $ScriptDir
 
 if (-not $DataDir) {
@@ -13,8 +13,9 @@ if (-not $DataDir) {
 
 Write-Host "==> Running ferrous-lakehouse table initialization at: $DataDir" -ForegroundColor Cyan
 python "$ScriptDir/init-tables.py" --data-dir "$DataDir"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Table initialization failed."
-    exit $LASTEXITCODE
+$exitCode = $LASTEXITCODE
+if ($exitCode -ne 0) {
+    Write-Host "Table initialization failed with exit code $exitCode." -ForegroundColor Red
+    exit $exitCode
 }
 Write-Host "==> Lakehouse tables initialized successfully." -ForegroundColor Green

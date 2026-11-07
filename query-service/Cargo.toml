@@ -1,0 +1,21 @@
+[package]
+name = "query-service"
+version = "0.1.0"
+edition = "2021"
+description = "Embedded Apache DataFusion vectorized analytical query runtime for ferrous-streaming"
+
+[dependencies]
+datafusion = { version = "55.2.0" }
+tokio = { version = "1.44", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2.0"
+axum = { version = "0.8" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+sysinfo = "0.40"

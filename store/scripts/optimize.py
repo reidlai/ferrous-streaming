@@ -50,8 +50,36 @@ def run_optimize(table_dir: Path, target_mb: int = 128) -> dict:
     commit_file = log_dir / f"{next_version:020d}.json"
     now_ms = int(time.time() * 1000)
 
-    # Scan for parquet files in table directory
-    parquet_files = list(table_dir.glob("*.parquet"))
+    # Replay transaction log to identify already-tombstoned files
+    tombstoned_files = set()
+    commit_files = sorted(log_dir.glob("*.json"))
+    for cf in commit_files:
+        try:
+            with open(cf, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    action = json.loads(line)
+                    if "remove" in action:
+                        tombstoned_files.add(action["remove"]["path"])
+                    elif "add" in action:
+                        tombstoned_files.discard(action["add"]["path"])
+        except Exception:
+            pass
+
+    # Discover candidate parquet files on disk excluding tombstoned files
+    parquet_files = [pf for pf in table_dir.glob("*.parquet") if pf.name not in tombstoned_files]
+    if not parquet_files:
+        print(f"  [OPTIMIZED] Table '{table_dir.name}' -> No active files to compact.")
+        return {
+            "status": "success",
+            "table": table_dir.name,
+            "version": current_version,
+            "files_removed": 0,
+            "files_added": 0
+        }
+
     target_bytes = target_mb * 1024 * 1024
 
     compacted_file_name = f"part-{uuid.uuid4().hex[:8]}-c000.snappy.parquet"
@@ -107,10 +135,12 @@ def run_optimize(table_dir: Path, target_mb: int = 128) -> dict:
         }
     })
 
-    # Write atomic NDJSON commit
-    with open(commit_file, "w", encoding="utf-8") as f:
+    # Write atomic NDJSON commit via temporary file
+    tmp_commit_file = log_dir / f".tmp_{uuid.uuid4().hex}"
+    with open(tmp_commit_file, "w", encoding="utf-8") as f:
         for action in actions:
             f.write(json.dumps(action) + "\n")
+    os.replace(tmp_commit_file, commit_file)
 
     print(f"  [OPTIMIZED] Table '{table_dir.name}' -> Commit {next_version:020d}.json "
           f"(Compacted {removed_count} files into {compacted_file_name}, target {target_mb}MB)")

@@ -64,14 +64,13 @@ services:
       - IGGY_HTTP_JWT_DECODING_SECRET=${IGGY_HTTP_JWT_DECODING_SECRET:-}
       - STREAMING_SERVICE_ACCOUNT=${STREAMING_SERVICE_ACCOUNT:-svc_ferrous_streaming}
     healthcheck:
-      test: ["CMD", "/usr/local/bin/iggy-server", "--version"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/ping"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
     security_opt:
       - no-new-privileges:true
-      - seccomp:unconfined
     cap_drop:
       - ALL
     deploy:

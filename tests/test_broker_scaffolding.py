@@ -106,8 +106,8 @@ class TestBrokerScaffolding(unittest.TestCase):
         )
 
     def test_03_dockerfile_security_and_rootless(self):
-        """Assertion 3: Dockerfile.iggy enforces non-root UID 10001, upstream build, and pure Rust core."""
-        dockerfiles = [REPO_ROOT / "Dockerfile.iggy"]
+        """Assertion 3: Dockerfile and Dockerfile.iggy enforce non-root UID 10001, upstream build, and pure Rust core."""
+        dockerfiles = [REPO_ROOT / "Dockerfile", REPO_ROOT / "Dockerfile.iggy"]
 
         for df in dockerfiles:
             self.assertTrue(df.exists(), f"Missing Dockerfile: {df}")

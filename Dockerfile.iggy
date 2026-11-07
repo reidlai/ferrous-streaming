@@ -12,8 +12,8 @@ LABEL org.opencontainers.image.title="ferrous-streaming-iggy" \
       org.opencontainers.image.vendor="FerrousCX" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# Install minimal runtime dependencies (pure Rust core + curl for healthcheck)
-RUN apk add --no-cache ca-certificates libgcc curl
+# Install minimal runtime dependencies (pure Rust core + curl for healthcheck + gcompat for glibc compatibility)
+RUN apk add --no-cache ca-certificates libgcc curl gcompat
 
 # Create unprivileged non-root user and group (UID/GID 10001)
 RUN addgroup -g 10001 -S iggy && \

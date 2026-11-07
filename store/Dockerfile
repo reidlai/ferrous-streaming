@@ -16,6 +16,8 @@ RUN addgroup -g 10001 appgroup && \
 
 WORKDIR /app
 
+ENV PYTHONUNBUFFERED=1
+
 # Copy application artifacts
 COPY --chown=10001:10001 config/ ./config/
 COPY --chown=10001:10001 schemas/ ./schemas/

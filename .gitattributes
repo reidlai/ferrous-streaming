@@ -3,3 +3,4 @@
 
 # Enforce LF line endings on shell scripts
 *.sh text eol=lf
+

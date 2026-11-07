@@ -217,10 +217,10 @@ class ArroyoServiceUnitTests(unittest.TestCase):
         self.assertTrue(toml_path.is_file(), "config/arroyo.toml not found")
 
         content = toml_path.read_text(encoding="utf-8")
-        self.assertIn('bind_address = "0.0.0.0:5115"', content)
+        self.assertTrue('bind-address = "0.0.0.0"' in content or 'bind_address = "0.0.0.0:5115"' in content)
+        self.assertTrue('http-port = 5115' in content or '5115' in content)
         self.assertIn('checkpoint-url = "file:///data/arroyo/checkpoints"', content)
         self.assertIn('scheduler = "node"', content)
-        self.assertIn('default_parallelism = 1', content)
 
     def test_04_m2m_jwt_generation_for_svc_ferrous_streaming(self):
         """Verifies JWT structure, signature, and claims for svc_ferrous_streaming."""

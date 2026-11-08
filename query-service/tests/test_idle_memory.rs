@@ -12,7 +12,9 @@ async fn test_idle_memory_overhead_under_40mb() {
     sys.refresh_processes(ProcessesToUpdate::All, true);
 
     let pid = Pid::from_u32(std::process::id());
-    let process = sys.process(pid).expect("current process should exist in process table");
+    let process = sys
+        .process(pid)
+        .expect("current process should exist in process table");
     let memory_bytes = process.memory();
     let memory_mb = memory_bytes as f64 / (1024.0 * 1024.0);
     println!("Process RSS memory: {:.2} MB (threshold: 40 MB)", memory_mb);
@@ -22,4 +24,3 @@ async fn test_idle_memory_overhead_under_40mb() {
         memory_mb
     );
 }
-

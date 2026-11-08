@@ -4,6 +4,11 @@ pub const DEFAULT_BATCH_SIZE: usize = 8192;
 pub const DEFAULT_FLIGHT_PORT: u16 = 50051;
 pub const DEFAULT_HTTP_PORT: u16 = 8085;
 pub const DEFAULT_DATA_DIR: &str = "./store/data/delta";
+pub const DEFAULT_TABLES: &[&str] = &[
+    "orders_raw_events",
+    "orders_current_state",
+    "llm_benchmarks",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryConfig {
@@ -13,6 +18,7 @@ pub struct QueryConfig {
     pub http_port: u16,
     pub data_dir: String,
     pub information_schema: bool,
+    pub tables: Vec<String>,
 }
 
 impl Default for QueryConfig {
@@ -24,6 +30,7 @@ impl Default for QueryConfig {
             http_port: DEFAULT_HTTP_PORT,
             data_dir: DEFAULT_DATA_DIR.to_string(),
             information_schema: true,
+            tables: DEFAULT_TABLES.iter().map(|s| s.to_string()).collect(),
         }
     }
 }
@@ -62,5 +69,14 @@ impl QueryConfig {
         self.information_schema = enable;
         self
     }
-}
 
+    pub fn with_tables(mut self, tables: Vec<String>) -> Self {
+        self.tables = tables;
+        self
+    }
+
+    pub fn with_table(mut self, table: impl Into<String>) -> Self {
+        self.tables.push(table.into());
+        self
+    }
+}

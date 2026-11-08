@@ -1,15 +1,15 @@
-use query_service::{
-    config::{QueryConfig, DEFAULT_BATCH_SIZE},
-    context::QueryEngine,
-    error::QueryError,
-    server::{create_router, HealthResponse, QueryRequest, QueryResponse},
-};
 use axum::{
     body::Body,
     http::{header, Request, StatusCode},
 };
 use datafusion::arrow::array::Int64Array;
 use http_body_util::BodyExt;
+use query_service::{
+    config::{QueryConfig, DEFAULT_BATCH_SIZE},
+    context::QueryEngine,
+    error::QueryError,
+    server::{create_router, HealthResponse, QueryRequest, QueryResponse},
+};
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
 
@@ -44,7 +44,10 @@ async fn test_multithreaded_concurrent_sql_queries() {
         let engine_clone = engine.clone();
         let handle = tokio::spawn(async move {
             let sql = format!("SELECT {} as id, {} * 2 as doubled", i, i);
-            let batches = engine_clone.sql(&sql).await.expect("query execution should succeed");
+            let batches = engine_clone
+                .sql(&sql)
+                .await
+                .expect("query execution should succeed");
             assert!(!batches.is_empty());
             assert_eq!(batches[0].num_rows(), 1);
 
@@ -66,7 +69,9 @@ async fn test_multithreaded_concurrent_sql_queries() {
     }
 
     for handle in handles {
-        handle.await.expect("task should complete without panicking");
+        handle
+            .await
+            .expect("task should complete without panicking");
     }
 }
 
@@ -102,10 +107,12 @@ async fn test_healthcheck_endpoint() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let health: HealthResponse = serde_json::from_slice(&body_bytes).expect("Valid HealthResponse JSON");
+    let health: HealthResponse =
+        serde_json::from_slice(&body_bytes).expect("Valid HealthResponse JSON");
     assert_eq!(health.status, "healthy");
     assert_eq!(health.batch_size, 8192);
     assert_eq!(health.engine, "DataFusion");
+    assert_eq!(health.registered_tables_count, 0);
 }
 
 #[tokio::test]
@@ -133,7 +140,8 @@ async fn test_query_endpoint_success_and_error() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let query_res: QueryResponse = serde_json::from_slice(&body_bytes).expect("Valid QueryResponse JSON");
+    let query_res: QueryResponse =
+        serde_json::from_slice(&body_bytes).expect("Valid QueryResponse JSON");
     assert_eq!(query_res.row_count, 1);
     assert!(query_res.message.contains("returned 1 rows"));
 

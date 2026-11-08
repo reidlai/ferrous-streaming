@@ -14,9 +14,20 @@ pub enum QueryError {
     #[error("Query execution error: {0}")]
     Execution(String),
 
+    #[error("Delta table error: {0}")]
+    Delta(String),
+
+    #[error("Catalog error: {0}")]
+    Catalog(String),
+
     #[error("Server error: {0}")]
     Server(String),
 }
 
-pub type Result<T> = std::result::Result<T, QueryError>;
+impl From<deltalake::errors::DeltaTableError> for QueryError {
+    fn from(err: deltalake::errors::DeltaTableError) -> Self {
+        QueryError::Delta(err.to_string())
+    }
+}
 
+pub type Result<T> = std::result::Result<T, QueryError>;

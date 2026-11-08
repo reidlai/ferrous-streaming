@@ -206,7 +206,7 @@ async fn setup_benchmark_engine() -> (tempfile::TempDir, QueryEngine) {
     let config = QueryConfig::default()
         .with_data_dir(delta_dir.to_str().unwrap())
         .with_batch_size(BATCH_SIZE)
-        .with_target_partitions(4);
+        .with_target_partitions(2);
 
     let engine = QueryEngine::try_new(config).expect("QueryEngine should initialize");
     engine

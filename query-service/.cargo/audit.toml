@@ -1,0 +1,8 @@
+# cargo-audit configuration for query-service
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0173", # proc-macro-error2 unmaintained transitive fork
+    "RUSTSEC-2026-0194", # quick-xml vulnerability in upstream datafusion-proto/parquet
+    "RUSTSEC-2026-0195", # quick-xml vulnerability in upstream datafusion-proto/parquet
+]
+

@@ -33,7 +33,9 @@ pub fn create_router(engine: QueryEngine) -> Router {
     Router::new()
         .route("/health", get(health_handler))
         .route("/api/query", post(query_handler))
+        .route("/api/v1/query", post(query_handler))
         .route("/api/catalog", get(catalog_handler))
+        .route("/api/v1/catalog/tables", get(catalog_handler))
         .with_state(Arc::new(engine))
 }
 

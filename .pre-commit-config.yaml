@@ -84,3 +84,21 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: query-service-cargo-fmt
+        name: Validate query-service Code Formatting (cargo fmt)
+        entry: cargo fmt --manifest-path query-service/Cargo.toml -- --check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: query-service-cargo-clippy
+        name: Validate query-service Static Analysis (cargo clippy)
+        entry: cargo clippy --manifest-path query-service/Cargo.toml --all-targets -- -D warnings
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: query-service-cargo-test
+        name: Validate query-service Unit & Integration Tests (cargo test)
+        entry: cargo test --manifest-path query-service/Cargo.toml --all-targets
+        language: system
+        pass_filenames: false
+        always_run: true

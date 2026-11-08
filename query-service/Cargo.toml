@@ -3,6 +3,9 @@ name = "query-service"
 version = "0.1.0"
 edition = "2021"
 description = "Embedded Apache DataFusion vectorized analytical query runtime for ferrous-streaming"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+publish = false
 
 [dependencies]
 datafusion = { version = "55.2.0" }
@@ -27,6 +30,7 @@ sysinfo = "0.40"
 tempfile = "3.17"
 parquet = "59.3"
 arrow = "59.3"
+toml = "0.8"
 
 [profile.test]
 opt-level = 3

@@ -10,6 +10,12 @@ pub const DEFAULT_TABLES: &[&str] = &[
     "llm_benchmarks",
 ];
 
+pub fn default_target_partitions() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryConfig {
     pub batch_size: usize,
@@ -19,6 +25,8 @@ pub struct QueryConfig {
     pub data_dir: String,
     pub information_schema: bool,
     pub tables: Vec<String>,
+    #[serde(default = "default_target_partitions")]
+    pub target_partitions: usize,
 }
 
 impl Default for QueryConfig {
@@ -31,6 +39,7 @@ impl Default for QueryConfig {
             data_dir: DEFAULT_DATA_DIR.to_string(),
             information_schema: true,
             tables: DEFAULT_TABLES.iter().map(|s| s.to_string()).collect(),
+            target_partitions: default_target_partitions(),
         }
     }
 }
@@ -72,6 +81,11 @@ impl QueryConfig {
 
     pub fn with_tables(mut self, tables: Vec<String>) -> Self {
         self.tables = tables;
+        self
+    }
+
+    pub fn with_target_partitions(mut self, target_partitions: usize) -> Self {
+        self.target_partitions = target_partitions.max(1);
         self
     }
 

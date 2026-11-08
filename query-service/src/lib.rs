@@ -1,9 +1,11 @@
+pub mod benchmark;
 pub mod catalog;
 pub mod config;
 pub mod context;
 pub mod error;
 pub mod server;
 
+pub use benchmark::BenchmarkMetrics;
 pub use catalog::{
     CatalogSummary, ColumnSummary, DynamicDeltaTableProvider, LakehouseCatalog, TableSummary,
 };

@@ -78,7 +78,12 @@ fn append_delta_commit(table_dir: &Path, commit_idx: usize, part_name: &str, par
     f.write_all(commit_content.as_bytes()).unwrap();
 }
 
-fn write_test_parquet_with_status(path: &Path, ids: &[i64], vals: &[&str], statuses: &[&str]) -> usize {
+fn write_test_parquet_with_status(
+    path: &Path,
+    ids: &[i64],
+    vals: &[&str],
+    statuses: &[&str],
+) -> usize {
     let schema = Arc::new(Schema::new(vec![
         Field::new("id", DataType::Int64, false),
         Field::new("val", DataType::Utf8, false),
@@ -89,7 +94,8 @@ fn write_test_parquet_with_status(path: &Path, ids: &[i64], vals: &[&str], statu
     let val_array = Arc::new(StringArray::from(vals.to_vec()));
     let status_array = Arc::new(StringArray::from(statuses.to_vec()));
 
-    let batch = RecordBatch::try_new(schema.clone(), vec![id_array, val_array, status_array]).unwrap();
+    let batch =
+        RecordBatch::try_new(schema.clone(), vec![id_array, val_array, status_array]).unwrap();
 
     let file = File::create(path).unwrap();
     let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
@@ -188,7 +194,9 @@ async fn test_direct_table_registration_valid_and_invalid() {
         "Invalid Delta path registration should fail"
     );
     match bad_res {
-        Err(QueryError::Delta(msg)) | Err(QueryError::Execution(msg)) | Err(QueryError::Catalog(msg)) => {
+        Err(QueryError::Delta(msg))
+        | Err(QueryError::Execution(msg))
+        | Err(QueryError::Catalog(msg)) => {
             assert!(
                 msg.contains("Failed to open Delta table")
                     || msg.contains("Invalid Delta table path")
@@ -332,10 +340,20 @@ async fn test_partition_pruning_and_filter_pushdown() {
     create_dir_all(&table_dir).unwrap();
 
     let part_a_path = table_dir.join("part-delivered.parquet");
-    let size_a = write_test_parquet_with_status(&part_a_path, &[10, 11], &["pkg_1", "pkg_2"], &["delivered", "delivered"]);
+    let size_a = write_test_parquet_with_status(
+        &part_a_path,
+        &[10, 11],
+        &["pkg_1", "pkg_2"],
+        &["delivered", "delivered"],
+    );
 
     let part_b_path = table_dir.join("part-cancelled.parquet");
-    let size_b = write_test_parquet_with_status(&part_b_path, &[20, 21, 22], &["pkg_3", "pkg_4", "pkg_5"], &["cancelled", "cancelled", "cancelled"]);
+    let size_b = write_test_parquet_with_status(
+        &part_b_path,
+        &[20, 21, 22],
+        &["pkg_3", "pkg_4", "pkg_5"],
+        &["cancelled", "cancelled", "cancelled"],
+    );
 
     create_partitioned_delta_table(
         &table_dir,
@@ -366,8 +384,15 @@ async fn test_partition_pruning_and_filter_pushdown() {
     assert_eq!(total_rows, 2);
 
     let status_col = batches[0].column(2);
-    let s0 = if let Some(dict) = status_col.as_any().downcast_ref::<DictionaryArray<UInt16Type>>() {
-        let values = dict.values().as_any().downcast_ref::<StringArray>().expect("dict values");
+    let s0 = if let Some(dict) = status_col
+        .as_any()
+        .downcast_ref::<DictionaryArray<UInt16Type>>()
+    {
+        let values = dict
+            .values()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("dict values");
         let key = dict.keys().value(0) as usize;
         values.value(key).to_string()
     } else if let Some(view) = status_col.as_any().downcast_ref::<StringViewArray>() {
@@ -375,7 +400,10 @@ async fn test_partition_pruning_and_filter_pushdown() {
     } else if let Some(arr) = status_col.as_any().downcast_ref::<StringArray>() {
         arr.value(0).to_string()
     } else {
-        panic!("unexpected status column type: {:?}", status_col.data_type());
+        panic!(
+            "unexpected status column type: {:?}",
+            status_col.data_type()
+        );
     };
     assert_eq!(s0, "delivered");
 

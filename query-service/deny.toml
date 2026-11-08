@@ -1,0 +1,43 @@
+# Cargo Deny Configuration for query-service (ferrous-streaming)
+# Enforces Tier 1 DevSecOps supply-chain assurance, security advisories, and license compliance.
+
+[advisories]
+yanked = "warn"
+unmaintained = "all"
+ignore = [
+    "RUSTSEC-2026-0173", # proc-macro-error2 unmaintained transitive fork in ecosystem
+    "RUSTSEC-2026-0194", # quick-xml vulnerability in upstream datafusion-proto/parquet
+    "RUSTSEC-2026-0195", # quick-xml vulnerability in upstream datafusion-proto/parquet
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "OpenSSL",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+    "bzip2-1.0.6",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+unused-allowed-license = "allow"
+
+[bans]
+multiple-versions = "warn"
+highlight = "all"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = [
+    "https://github.com/rust-lang/crates.io-index",
+    "https://index.crates.io/",
+]

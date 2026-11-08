@@ -76,8 +76,8 @@ flowchart LR
 | **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency management and streaming |
 | **Apache Iggy (HTTP Management)** | `3000` | HTTP / REST | Health probe (`/ping`), Auth (`/users/login`), and `/metrics` |
 | **Arroyo Web Dashboard** | `5115` | HTTP / WebSocket | Stream pipeline monitoring, metrics, and checkpoint inspection |
-| **DataFusion Query Service** *(planned)* | `50051` | Arrow Flight SQL (gRPC) | Analytical SQL over the Delta store for consumers other than `ferrous-api` |
-| **DataFusion Query Service** *(planned)* | `8085` | HTTP | Query and health endpoints of the same service |
+| **query-service (Flight SQL)** | `50051` | Arrow Flight SQL (gRPC - Planned) | Analytical SQL boundary over Delta store and federated SQLite operational stores |
+| **query-service (REST & Metrics)** | `8085` | HTTP / JSON | Interactive SQL queries, catalog introspection, health probe, and benchmark metrics |
 
 > [!WARNING]
 > **Iggy-Kafka bridge status: configured, not yet run.** The Iggy server does not speak Kafka, so Arroyo and the replayer reach Iggy through the bridge (AD-28): the upstream Apache Iggy `iggy-gateway-kafka` image, pinned by digest and configured here, not built here. It is pre-release (only `edge` tags exist). The compose services, topic map, user permissions and pipeline settings below are checked by unit tests, but **nothing has been started or tested against a running stack**: the live checks L1-L14 of the Bridge Contract Sheet are open (`OPEN Bridge Compatibility`). Expect to change this configuration when they run. The Iggy server image (`apache/iggy:latest`, 0.9) is also older than the gateway requires for its offset commits; Arroyo's commits are best effort and its data path does not depend on them, but check it first (L7).
@@ -119,6 +119,19 @@ Set `BRIDGE_IGGY_USERNAME` and `BRIDGE_IGGY_PASSWORD` in `.env` (never in the co
 ## Delta Store (`store/`)
 
 The Delta Lake table definitions, retention config, and `init-tables` / `optimize` / `vacuum` scripts live in `store/`, relocated from the former `ferrous-lakehouse` repository with history preserved. Arroyo writes the streaming tables; the `delta-store` compose service initializes and maintains them. See `store/README.md`.
+
+---
+
+## Query Service (`query-service/`)
+
+The vectorized analytical query engine and federated Lakehouse runtime lives in `query-service/`, powered by **Apache DataFusion 55**. It provides sub-3ms analytical queries across transactional Delta Lake stores and operational SQLite tables with zero JVM or cloud CI dependencies (AD-13).
+
+- **Flight SQL Endpoint (`50051`):** Binary Arrow columnar streaming protocol for external BI tools and distributed query planners.
+- **HTTP REST Endpoint (`8085`):** Interactive SQL query API (`/api/v1/query`), catalog introspection (`/api/v1/catalog/tables`), health checking (`/health`), and latency benchmarks (`/api/v1/benchmark`).
+- **Extensible TableProvider Federation:** Dynamic registration of SQLite and custom operational stores with SQL projection and filter pushdown.
+- **Audit & DevSecOps Suite:** Verified locally via `scripts/audit-query-service.sh` and `scripts/audit-query-service.ps1` with 0 high/critical CVEs.
+
+See `query-service/README.md` for C4 component architecture diagrams, query benchmark profiles, and local verification instructions.
 
 ---
 

@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod config;
 pub mod context;
 pub mod error;
+pub mod federation;
 pub mod server;
 
 pub use benchmark::BenchmarkMetrics;
@@ -15,3 +16,4 @@ pub use config::{
 };
 pub use context::QueryEngine;
 pub use error::{QueryError, Result};
+pub use federation::{SqliteScanExec, SqliteTableProvider};

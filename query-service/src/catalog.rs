@@ -18,6 +18,7 @@ use tracing::{info, warn};
 
 use crate::config::QueryConfig;
 use crate::error::{QueryError, Result};
+pub use crate::federation::SqliteTableProvider;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ColumnSummary {
@@ -75,8 +76,7 @@ async fn materialize_delta_provider(
     } else {
         target_partitions.min(batches.len())
     };
-    let mut partitions: Vec<Vec<RecordBatch>> =
-        (0..partition_count).map(|_| Vec::new()).collect();
+    let mut partitions: Vec<Vec<RecordBatch>> = (0..partition_count).map(|_| Vec::new()).collect();
     if batches.is_empty() {
         partitions = vec![vec![]];
     } else {
@@ -420,6 +420,135 @@ impl LakehouseCatalog {
         );
 
         info!("Registered Delta table '{table_name}' at '{path}'");
+        Ok(())
+    }
+
+    pub fn register_provider(&self, name: &str, provider: Arc<dyn TableProvider>) -> Result<()> {
+        {
+            let guard = self.tables.read().unwrap_or_else(|e| e.into_inner());
+            if let Some(t) = guard.get(name) {
+                if t.status == "registered" {
+                    return Err(QueryError::Catalog(format!(
+                        "Table '{name}' is already registered in catalog"
+                    )));
+                }
+            }
+        }
+
+        let schema = provider.schema();
+        let columns = schema
+            .fields()
+            .iter()
+            .map(|f| ColumnSummary {
+                name: f.name().clone(),
+                data_type: format!("{}", f.data_type()),
+                nullable: f.is_nullable(),
+            })
+            .collect();
+
+        if let Err(e) = self.ctx.register_table(name, provider) {
+            let err_msg = format!("Failed to register TableProvider '{name}': {e}");
+            let mut guard = self.tables.write().unwrap_or_else(|e| e.into_inner());
+            guard.insert(
+                name.to_string(),
+                TableSummary {
+                    name: name.to_string(),
+                    path: "custom_provider".to_string(),
+                    columns: Vec::new(),
+                    status: "error".to_string(),
+                    error: Some(err_msg),
+                },
+            );
+            return Err(QueryError::DataFusion(e));
+        }
+
+        let mut guard = self.tables.write().unwrap_or_else(|e| e.into_inner());
+        guard.insert(
+            name.to_string(),
+            TableSummary {
+                name: name.to_string(),
+                path: "custom_provider".to_string(),
+                columns,
+                status: "registered".to_string(),
+                error: None,
+            },
+        );
+
+        info!("Registered custom TableProvider '{name}'");
+        Ok(())
+    }
+
+    pub fn register_sqlite_table(&self, name: &str, db_path: &str, table_name: &str) -> Result<()> {
+        {
+            let guard = self.tables.read().unwrap_or_else(|e| e.into_inner());
+            if let Some(t) = guard.get(name) {
+                if t.status == "registered" {
+                    return Err(QueryError::Catalog(format!(
+                        "Table '{name}' is already registered in catalog"
+                    )));
+                }
+            }
+        }
+
+        let provider = match crate::federation::SqliteTableProvider::try_new(db_path, table_name) {
+            Ok(p) => Arc::new(p),
+            Err(e) => {
+                let err_msg = format!("Failed to register SQLite table '{name}': {e}");
+                let mut guard = self.tables.write().unwrap_or_else(|e| e.into_inner());
+                guard.insert(
+                    name.to_string(),
+                    TableSummary {
+                        name: name.to_string(),
+                        path: db_path.to_string(),
+                        columns: Vec::new(),
+                        status: "error".to_string(),
+                        error: Some(err_msg),
+                    },
+                );
+                return Err(e);
+            }
+        };
+
+        let schema = provider.schema();
+        let columns = schema
+            .fields()
+            .iter()
+            .map(|f| ColumnSummary {
+                name: f.name().clone(),
+                data_type: format!("{}", f.data_type()),
+                nullable: f.is_nullable(),
+            })
+            .collect();
+
+        if let Err(e) = self.ctx.register_table(name, provider) {
+            let err_msg = format!("Failed to register SQLite table '{name}': {e}");
+            let mut guard = self.tables.write().unwrap_or_else(|e| e.into_inner());
+            guard.insert(
+                name.to_string(),
+                TableSummary {
+                    name: name.to_string(),
+                    path: db_path.to_string(),
+                    columns: Vec::new(),
+                    status: "error".to_string(),
+                    error: Some(err_msg),
+                },
+            );
+            return Err(QueryError::DataFusion(e));
+        }
+
+        let mut guard = self.tables.write().unwrap_or_else(|e| e.into_inner());
+        guard.insert(
+            name.to_string(),
+            TableSummary {
+                name: name.to_string(),
+                path: db_path.to_string(),
+                columns,
+                status: "registered".to_string(),
+                error: None,
+            },
+        );
+
+        info!("Registered SQLite table '{name}' pointing to '{table_name}' at '{db_path}'");
         Ok(())
     }
 

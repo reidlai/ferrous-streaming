@@ -235,9 +235,7 @@ static SHARED_BENCHMARK: tokio::sync::OnceCell<(tempfile::TempDir, QueryEngine)>
 
 async fn get_shared_engine() -> &'static QueryEngine {
     let (_, engine) = SHARED_BENCHMARK
-        .get_or_init(|| async {
-            setup_benchmark_engine().await
-        })
+        .get_or_init(|| async { setup_benchmark_engine().await })
         .await;
     engine
 }

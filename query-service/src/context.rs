@@ -88,6 +88,19 @@ impl QueryEngine {
         self.catalog.register_table(table_name, path).await
     }
 
+    pub fn register_provider(
+        &self,
+        name: &str,
+        provider: Arc<dyn datafusion::datasource::TableProvider>,
+    ) -> Result<()> {
+        self.catalog.register_provider(name, provider)
+    }
+
+    pub fn register_sqlite_table(&self, name: &str, db_path: &str, table_name: &str) -> Result<()> {
+        self.catalog
+            .register_sqlite_table(name, db_path, table_name)
+    }
+
     pub async fn materialize_table(&self, table_name: &str) -> Result<()> {
         self.catalog.materialize_table(table_name).await
     }

@@ -16,6 +16,8 @@ thiserror = "2.0"
 axum = { version = "0.8" }
 url = "2.5"
 async-trait = "0.1"
+futures = "0.3"
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

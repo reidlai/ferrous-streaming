@@ -178,6 +178,7 @@ You can build and test `ferrous-streaming` in Standalone Mode using Docker Compo
 ### Prerequisites
 
 * **Docker & Docker Compose:** `v2.29+`
+* **Rust & Cargo:** `1.80+` (for cross-platform provisioning and workload tools)
 
 ### 1. Launch the Streaming Stack
 
@@ -204,10 +205,13 @@ docker compose ps
 Idempotently initialize stream `orders` and partitioned topics (`intake` and `consolidated`, 4 partitions each) with immediate `fsync` persistence:
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin provision-topics -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-topics.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-topics.ps1
 ```
 
@@ -216,10 +220,13 @@ Idempotently initialize stream `orders` and partitioned topics (`intake` and `co
 Idempotently provision consumer groups for decoupled stream processing and command consumption (`cg-arroyo-raw`, `cg-cmd-handler`, and `cg-arroyo-state`):
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin provision-consumer-groups -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-consumer-groups.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-consumer-groups.ps1
 ```
 
@@ -228,10 +235,13 @@ Idempotently provision consumer groups for decoupled stream processing and comma
 Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated to Apache Iggy with its own native credentials (these services are not Kanidm clients), attaching the consumer groups `cg-arroyo-olist` (`olist/orders_stream`), `cg-arroyo-raw` (`orders/intake`) and `cg-arroyo-state` (`orders/consolidated`):
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin verify-arroyo -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-arroyo.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-arroyo.ps1
 ```
 
@@ -240,14 +250,20 @@ Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated
 Deploy both Arroyo streaming pipelines (Pipeline 1: `raw_event_archiver` connecting to `orders/intake` via `cg-arroyo-raw`; Pipeline 2: `state_snapshot_consolidator` connecting to `orders/consolidated` via `cg-arroyo-state`):
 
 ```bash
-# POSIX Bash (Deploys both pipelines sequentially)
+# Cargo (Recommended, Cross-Platform - deploys both pipelines and initializes Delta log)
+cargo run --bin deploy-pipelines -- [--dry-run]
+
+# Alternatively, run the complete suite in one step:
+cargo run --bin streaming-admin -- all [--dry-run]
+
+# POSIX Bash (Legacy, deploys both pipelines sequentially)
 ./scripts/run-migrations.sh
 
 # Or deploy individual pipelines:
 ./scripts/deploy-pipeline-raw-archiver.sh
 ./scripts/deploy-pipeline-state-consolidator.sh
 
-# PowerShell (Deploys both pipelines sequentially)
+# PowerShell (Legacy, deploys both pipelines sequentially)
 .\scripts\run-migrations.ps1
 
 # Or deploy individual pipelines:

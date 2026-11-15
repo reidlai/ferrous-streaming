@@ -23,18 +23,17 @@ flowchart LR
     end
 
     subgraph Streaming_Submodule ["ferrous-streaming Submodule"]
-        Bridge["Iggy-Kafka bridge<br/>• Port 9092 (Kafka wire protocol)"]
         Iggy["Apache Iggy Broker<br/>• Port 8090 (Native TCP)<br/>• Port 3000 (HTTP)"]
-        
+        Bridge["iggy-kafka-bridge<br/>• Port 9092 (Kafka wire protocol)"]
+
         subgraph Arroyo_Engine ["Arroyo Processing Engine"]
             Migrations["Schema Migrations<br/>(v1 -> v2 DDL Evolution)"]
             SQLPipeline["Arroyo SQL Streaming Jobs<br/>(Stream-to-Parquet Batcher)"]
         end
     end
 
-    subgraph Storage ["Delta Lake 2PC Parquet Sinks"]
-        DeltaRaw[("Delta Lake: orders_raw_events<br/>(Append-only Audit Log)")]
-        DeltaState[("Delta Lake: orders_current_state<br/>(Compacted State Projection)")]
+    subgraph Storage ["Delta Lake (2PC ACID Storage)"]
+        DeltaLake[("Delta Lake<br/>• orders_raw_events (Audit Log)<br/>• orders_current_state (State Projection)")]
     end
 
     subgraph Storage_Targets ["Storage Targets"]
@@ -45,25 +44,23 @@ flowchart LR
     end
 
     subgraph Downstream_Consumption ["Downstream Analytical Engine"]
-        DeltaSink["DeltaSink<br/>(Parquet Store)"]
         DataFusion["Apache DataFusion<br/>(Vectorized Engine)"]
         ApiService["FerrousCX API Service<br/>(Rust / Axum)"]
     end
 
-    Replayer -->|Kafka: 127.0.0.1:9092| Bridge
-    Bridge <-->|native SDK| Iggy
-    Bridge -->|Kafka: bridge:9092| SQLPipeline
+    Replayer -->|"Native TCP: localhost:8090"| Iggy
+    Iggy <-->|"Native SDK"| Bridge
+    Bridge -->|"Kafka Protocol: bridge:9092"| SQLPipeline
     Migrations --> SQLPipeline
-    SQLPipeline -->|2PC Micro-Batches| DeltaRaw
-    SQLPipeline -->|2PC State Projections| DeltaState
+    SQLPipeline -->|"2PC Micro-Batches & State Projections"| DeltaLake
 
-    DeltaSink -.-> Local
-    DeltaSink -.-> MinIO
-    DeltaSink -.-> AWSS3
-    DeltaSink -.-> GCS
+    DeltaLake -.-> Local
+    DeltaLake -.-> MinIO
+    DeltaLake -.-> AWSS3
+    DeltaLake -.-> GCS
 
-    DeltaSink -->|SQL Scan &lt;3ms| DataFusion
-    DataFusion -->|Historical Analytics| ApiService
+    DeltaLake -->|"SQL Scan <3ms"| DataFusion
+    DataFusion -->|"Historical Analytics"| ApiService
 ```
 
 > **Note on Pipeline Boundaries:** The **FerrousCX API Service (Rust / Axum)** connects to **Apache DataFusion** to query this Delta Lake Arroyo storage **strictly for historical streaming datasets** (e.g. Olist historical transactions, reviews, delivery logs). Live transactional commands and state changes bypass this pipeline and are handled strictly by the CQRS-ES pattern in **`ferrous-cqrses`**.
@@ -72,15 +69,15 @@ flowchart LR
 
 | Component | Port | Protocol | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Iggy-Kafka bridge** | `9092` | Kafka Wire Protocol (TCP) | The platform's only Kafka endpoint: Arroyo reads through it on the compose network (`bridge:9092`), `stream-replay-rs` publishes through it on host loopback (`127.0.0.1:9092`). Never published on all interfaces. |
-| **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency management and streaming |
+| **Iggy-Kafka bridge** | `9092` | Kafka Wire Protocol (TCP) | Protocol bridge translating Kafka wire protocol to native Iggy SDK: Arroyo reads through it on the compose network (`bridge:9092`). `stream-replay-rs` connects directly to Iggy on port `8090`. |
+| **Apache Iggy (Native TCP)** | `8090` | Iggy Custom Binary Protocol | High-performance, low-latency streaming and WAL ingestion (used directly by `stream-replay-rs` on `localhost:8090`) |
 | **Apache Iggy (HTTP Management)** | `3000` | HTTP / REST | Health probe (`/ping`), Auth (`/users/login`), and `/metrics` |
 | **Arroyo Web Dashboard** | `5115` | HTTP / WebSocket | Stream pipeline monitoring, metrics, and checkpoint inspection |
 | **query-service (Flight SQL)** | `50051` | Arrow Flight SQL (gRPC - Planned) | Analytical SQL boundary over Delta store and federated SQLite operational stores |
 | **query-service (REST & Metrics)** | `8085` | HTTP / JSON | Interactive SQL queries, catalog introspection, health probe, and benchmark metrics |
 
 > [!WARNING]
-> **Iggy-Kafka bridge status: configured, not yet run.** The Iggy server does not speak Kafka, so Arroyo and the replayer reach Iggy through the bridge (AD-28): the upstream Apache Iggy `iggy-gateway-kafka` image, pinned by digest and configured here, not built here. It is pre-release (only `edge` tags exist). The compose services, topic map, user permissions and pipeline settings below are checked by unit tests, but **nothing has been started or tested against a running stack**: the live checks L1-L14 of the Bridge Contract Sheet are open (`OPEN Bridge Compatibility`). Expect to change this configuration when they run. The Iggy server image (`apache/iggy:latest`, 0.9) is also older than the gateway requires for its offset commits; Arroyo's commits are best effort and its data path does not depend on them, but check it first (L7).
+> **Iggy-Kafka bridge status: configured, not yet run.** The Iggy server does not speak Kafka, so Arroyo reaches Iggy through the bridge (AD-28): the upstream Apache Iggy `iggy-gateway-kafka` image, pinned by digest and configured here, not built here. (The replayer connects directly to Iggy over native TCP: `localhost:8090`). It is pre-release (only `edge` tags exist). The compose services, topic map, user permissions and pipeline settings below are checked by unit tests, but **nothing has been started or tested against a running stack**: the live checks L1-L14 of the Bridge Contract Sheet are open (`OPEN Bridge Compatibility`). Expect to change this configuration when they run. The Iggy server image (`apache/iggy:latest`, 0.9) is also older than the gateway requires for its offset commits; Arroyo's commits are best effort and its data path does not depend on them, but check it first (L7).
 
 ### Iggy-Kafka bridge
 
@@ -89,7 +86,7 @@ Contract: the Bridge Contract Sheet in `ferrous-cx/contracts/` (draft). Topic na
 | Piece | Where | What it does |
 | :--- | :--- | :--- |
 | `bridge` service | `docker-compose.yml` | Gateway instance for the compose network, advertises `bridge:9092`. Arroyo waits for it to be healthy. |
-| `bridge-host` service | `docker-compose.yml` | A second instance of the same image, published on `127.0.0.1:9092` only and advertising that address, for the host-run replayer. The gateway allows one listener per protocol, so two instances are the way to get two advertised addresses. |
+| `bridge-host` service | `docker-compose.yml` | A second instance of the same image, published on `127.0.0.1:9092` only and advertising that address, for host-run Kafka tooling/consumers and diagnostic verification. The gateway allows one listener per protocol, so two instances are the way to get two advertised addresses. |
 | `config/bridge/topic-map.toml` | generated | Maps Kafka names (`orders.intake`, `orders.consolidated`, `olist.orders_stream`) to Iggy `{stream, topic}`. Any other name resolves to an empty default stream and fails with `UNKNOWN_TOPIC_OR_PARTITION`. Auto-creation of topics is off. |
 | `scripts/generate-bridge-topic-map.py` | script | Regenerates the map from `topics.yml`; `--check` fails when it is stale. |
 | `scripts/provision-bridge-user.py` | script | Builds (dry run) or creates the Iggy user of the bridge. This user is the produce allowlist: it may send only to topics marked `kafka.produce: true` (`olist/orders_stream`), and has no `manage_*` permission, so Kafka CreateTopics, DeleteTopics and AlterConfigs are refused. |
@@ -104,7 +101,7 @@ Set `BRIDGE_IGGY_USERNAME` and `BRIDGE_IGGY_PASSWORD` in `.env` (never in the co
 
 1. **Dedicated Historical Data Ingestion Broker:**
    * Pre-configured Apache Iggy stream topologies for the topics provisioned by `ferrous-cx` (`olist/orders_stream`, `orders/intake`, `orders/consolidated`), optimized for sub-millisecond fsync ingestion and zero-copy consumer groups.
-   * An Iggy-Kafka bridge (the upstream Apache Iggy Kafka gateway, configured here) that lets Arroyo and producer tools like `stream-replay-rs` use plain Kafka clients against Iggy (not yet run, see the status note).
+   * An Iggy-Kafka bridge (the upstream Apache Iggy Kafka gateway, configured here) translating Kafka wire protocol to native Iggy SDK for Arroyo SQL pipelines (while `stream-replay-rs` connects directly via native TCP protocol).
 2. **Schema Versioning & SQL Migrations as Code:**
    * Versioned SQL DDL scripts (`migrations/001_initial_olist_schema.sql`, `migrations/002_add_delivery_sla_fields.sql`).
    * Manages stream schema evolution without downtime, schema drift, or corrupted Parquet files.
@@ -147,8 +144,11 @@ It uses the generic `stream-replay-rs` as its load driver (with a fixed-rate pro
 # 1. Ensure stream-replay-rs CLI is installed
 cargo install stream-replay-rs # or cargo install --path ../stream-replay-rs
 
-# 2. Run the synthetic workload generator
-python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
+# 2. Run the synthetic workload generator (Pure-Rust Cargo CLI, recommended cross-platform)
+cargo run --bin workload-generator -- --count 1000 --payload-size 1024 --partitions 4 --output /tmp/hpc_workload.jsonl
+
+# (Legacy Python generator reference)
+# python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
 
 # 3. Inject workload at fixed rate through the Iggy-Kafka bridge and run qualification verification
 python benchmark/run_hpc_benchmark.py --count 1000 --rate 25 --payload-size 1024
@@ -178,7 +178,7 @@ You can build and test `ferrous-streaming` in Standalone Mode using Docker Compo
 ### Prerequisites
 
 * **Docker & Docker Compose:** `v2.29+`
-* **Pre-commit:** `3.8+` (`pip install pre-commit` or `pipx install pre-commit`)
+* **Rust & Cargo:** `1.80+` (for cross-platform provisioning and workload tools)
 
 ### 1. Launch the Streaming Stack
 
@@ -186,9 +186,6 @@ You can build and test `ferrous-streaming` in Standalone Mode using Docker Compo
 # Clone the repository
 git clone https://github.com/reidlai/ferrous-streaming.git
 cd ferrous-streaming
-
-# Install local pre-commit hooks
-pre-commit install
 
 # Boot Apache Iggy and Arroyo locally
 docker compose up -d
@@ -208,10 +205,13 @@ docker compose ps
 Idempotently initialize stream `orders` and partitioned topics (`intake` and `consolidated`, 4 partitions each) with immediate `fsync` persistence:
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin provision-topics -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-topics.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-topics.ps1
 ```
 
@@ -220,10 +220,13 @@ Idempotently initialize stream `orders` and partitioned topics (`intake` and `co
 Idempotently provision consumer groups for decoupled stream processing and command consumption (`cg-arroyo-raw`, `cg-cmd-handler`, and `cg-arroyo-state`):
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin provision-consumer-groups -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-consumer-groups.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-consumer-groups.ps1
 ```
 
@@ -232,10 +235,13 @@ Idempotently provision consumer groups for decoupled stream processing and comma
 Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated to Apache Iggy with its own native credentials (these services are not Kanidm clients), attaching the consumer groups `cg-arroyo-olist` (`olist/orders_stream`), `cg-arroyo-raw` (`orders/intake`) and `cg-arroyo-state` (`orders/consolidated`):
 
 ```bash
-# POSIX Bash
+# Cargo (Recommended, Cross-Platform)
+cargo run --bin verify-arroyo -- [--dry-run]
+
+# POSIX Bash (Legacy)
 ./scripts/provision-arroyo.sh
 
-# PowerShell
+# PowerShell (Legacy)
 .\scripts\provision-arroyo.ps1
 ```
 
@@ -244,14 +250,20 @@ Verify that the Arroyo Stream Processor (port 5115) is healthy and authenticated
 Deploy both Arroyo streaming pipelines (Pipeline 1: `raw_event_archiver` connecting to `orders/intake` via `cg-arroyo-raw`; Pipeline 2: `state_snapshot_consolidator` connecting to `orders/consolidated` via `cg-arroyo-state`):
 
 ```bash
-# POSIX Bash (Deploys both pipelines sequentially)
+# Cargo (Recommended, Cross-Platform - deploys both pipelines and initializes Delta log)
+cargo run --bin deploy-pipelines -- [--dry-run]
+
+# Alternatively, run the complete suite in one step:
+cargo run --bin streaming-admin -- all [--dry-run]
+
+# POSIX Bash (Legacy, deploys both pipelines sequentially)
 ./scripts/run-migrations.sh
 
 # Or deploy individual pipelines:
 ./scripts/deploy-pipeline-raw-archiver.sh
 ./scripts/deploy-pipeline-state-consolidator.sh
 
-# PowerShell (Deploys both pipelines sequentially)
+# PowerShell (Legacy, deploys both pipelines sequentially)
 .\scripts\run-migrations.ps1
 
 # Or deploy individual pipelines:

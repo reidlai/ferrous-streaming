@@ -178,7 +178,6 @@ You can build and test `ferrous-streaming` in Standalone Mode using Docker Compo
 ### Prerequisites
 
 * **Docker & Docker Compose:** `v2.29+`
-* **Pre-commit:** `3.8+` (`pip install pre-commit` or `pipx install pre-commit`)
 
 ### 1. Launch the Streaming Stack
 
@@ -186,9 +185,6 @@ You can build and test `ferrous-streaming` in Standalone Mode using Docker Compo
 # Clone the repository
 git clone https://github.com/reidlai/ferrous-streaming.git
 cd ferrous-streaming
-
-# Install local pre-commit hooks
-pre-commit install
 
 # Boot Apache Iggy and Arroyo locally
 docker compose up -d

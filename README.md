@@ -101,7 +101,7 @@ Set `BRIDGE_IGGY_USERNAME` and `BRIDGE_IGGY_PASSWORD` in `.env` (never in the co
 
 1. **Dedicated Historical Data Ingestion Broker:**
    * Pre-configured Apache Iggy stream topologies for the topics provisioned by `ferrous-cx` (`olist/orders_stream`, `orders/intake`, `orders/consolidated`), optimized for sub-millisecond fsync ingestion and zero-copy consumer groups.
-   * An Iggy-Kafka bridge (the upstream Apache Iggy Kafka gateway, configured here) that lets Arroyo and producer tools like `stream-replay-rs` use plain Kafka clients against Iggy (not yet run, see the status note).
+   * An Iggy-Kafka bridge (the upstream Apache Iggy Kafka gateway, configured here) translating Kafka wire protocol to native Iggy SDK for Arroyo SQL pipelines (while `stream-replay-rs` connects directly via native TCP protocol).
 2. **Schema Versioning & SQL Migrations as Code:**
    * Versioned SQL DDL scripts (`migrations/001_initial_olist_schema.sql`, `migrations/002_add_delivery_sla_fields.sql`).
    * Manages stream schema evolution without downtime, schema drift, or corrupted Parquet files.
@@ -144,8 +144,11 @@ It uses the generic `stream-replay-rs` as its load driver (with a fixed-rate pro
 # 1. Ensure stream-replay-rs CLI is installed
 cargo install stream-replay-rs # or cargo install --path ../stream-replay-rs
 
-# 2. Run the synthetic workload generator
-python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
+# 2. Run the synthetic workload generator (Pure-Rust Cargo CLI, recommended cross-platform)
+cargo run --bin workload-generator -- --count 1000 --payload-size 1024 --partitions 4 --output /tmp/hpc_workload.jsonl
+
+# (Legacy Python generator reference)
+# python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
 
 # 3. Inject workload at fixed rate through the Iggy-Kafka bridge and run qualification verification
 python benchmark/run_hpc_benchmark.py --count 1000 --rate 25 --payload-size 1024

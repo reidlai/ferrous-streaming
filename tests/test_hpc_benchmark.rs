@@ -235,3 +235,53 @@ fn test_run_hpc_benchmark_live_mode_unreachable_endpoint_fails() {
         stderr
     );
 }
+
+#[test]
+fn test_readme_hpc_benchmark_documentation_completeness() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root_readme = std::fs::read_to_string(manifest_dir.join("README.md"))
+        .expect("read ferrous-streaming/README.md");
+    let bench_readme = std::fs::read_to_string(manifest_dir.join("benchmark").join("README.md"))
+        .expect("read ferrous-streaming/benchmark/README.md");
+
+    for (label, doc) in [
+        ("README.md", &root_readme),
+        ("benchmark/README.md", &bench_readme),
+    ] {
+        assert!(
+            doc.contains("Server Endpoint Discovery & Configuration"),
+            "{label} must contain 'Server Endpoint Discovery & Configuration'"
+        );
+        assert!(
+            doc.contains("benchmark/replay-profile.toml"),
+            "{label} must reference 'benchmark/replay-profile.toml'"
+        );
+        assert!(
+            doc.contains("stream-replay-rs --config benchmark/replay-profile.toml --sink stdout"),
+            "{label} must document dry-run dataset inspection with 'stream-replay-rs --config benchmark/replay-profile.toml --sink stdout'"
+        );
+        assert!(
+            doc.contains("cargo run --bin workload-generator"),
+            "{label} must document dataset generation with 'cargo run --bin workload-generator'"
+        );
+        assert!(
+            doc.contains("cargo run --bin run-hpc-benchmark"),
+            "{label} must document the pure-Rust benchmark runner 'cargo run --bin run-hpc-benchmark'"
+        );
+        for flag in [
+            "--sink-url",
+            "--iggy-url",
+            "--arroyo-url",
+            "--query-url",
+            "BRIDGE_URL",
+            "IGGY_HTTP_URL",
+            "ARROYO_API_URL",
+            "QUERY_SERVICE_URL",
+        ] {
+            assert!(
+                doc.contains(flag),
+                "{label} must document server endpoint flag/env '{flag}'"
+            );
+        }
+    }
+}

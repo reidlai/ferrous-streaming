@@ -134,38 +134,160 @@ See `query-service/README.md` for C4 component architecture diagrams, query benc
 
 ## HPC Benchmark (`benchmark/`)
 
-The platform's high-performance benchmark is public and lives here, based on the workload and method of **HPC-MQBench** (Mahmoodian and Kunkel, arXiv:2610.09786; FR-32, FR-33, OQ-9). It measures the FerrousCX platform end to end across all ingestion stages, and a run counts only when every record is accounted for (**qualification-first** reporting).
+The platform's high-performance benchmark is public and lives here, based on the workload and method of **HPC-MQBench** (Mahmoodian and Kunkel, arXiv:2610.09786; FR-32, FR-33, OQ-9, SM-8). It measures the FerrousCX platform end to end across all five ingestion stages, and a run counts only when every record is accounted for (**qualification-first** reporting).
 
-It uses the generic `stream-replay-rs` as its load driver (with a fixed-rate profile `--rate 25`, or a benchmark-configured rate) and publishes through the Iggy–Kafka bridge (`localhost:9092`), with zero dataset bundling. The benchmark topic is `benchmark.hpc_mqbench` (defined in `ferrous-cx/contracts/topics.yml`), while `ferrous-streaming` owns only the workload parameters (`benchmark/workload.toml`).
+It uses the generic, platform-agnostic **`stream-replay-rs`** CLI as its load driver (via `benchmark/replay-profile.toml` or explicit CLI flags) and publishes through the Iggy–Kafka bridge (`127.0.0.1:9092`), with zero static dataset bundling. The benchmark topic is `benchmark.hpc_mqbench` (defined in `ferrous-cx/contracts/topics.yml`), while `ferrous-streaming` owns the workload parameters (`benchmark/workload.toml`), the `stream-replay-rs` replay profile (`benchmark/replay-profile.toml`), and the qualification-first benchmark runner (`cargo run --bin run-hpc-benchmark`).
 
-### Running the Benchmark
+### Server Endpoint Discovery & Configuration
+
+How do `stream-replay-rs` and `run-hpc-benchmark` (or `benchmark/run_hpc_benchmark.py`) know which server endpoints to use?
+
+1. **TOML Replay Profile (`benchmark/replay-profile.toml`):** Sets the default `stream-replay-rs` sink type (`default_type = "iggy"`), target bridge address (`default_url = "127.0.0.1:9092"`), destination topic (`destination = "benchmark.hpc_mqbench"`), and microsecond timestamp pacing column (`timestamp_column = "client_timestamp_us"`, `timestamp_unit = "us"`, `partition_key = "record_id"`).
+2. **CLI Flags & Environment Variables:** Both `cargo run --bin run-hpc-benchmark` and `python benchmark/run_hpc_benchmark.py` resolve every stage's server endpoint from explicit CLI flags, environment variables, or local Docker Compose defaults:
+
+| Ingestion Stage | CLI Flag | Environment Variable | Default Endpoint | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Stage 1: Replayer Sink** | `--sink` | — | `iggy` | `stream-replay-rs` transport adapter (`iggy`, `kafka`, `nats`, `fluvio`, `iceoryx2`, `stdout`) |
+| **Stage 2: Iggy-Kafka Bridge** | `--sink-url` | `BRIDGE_URL` | `127.0.0.1:9092` | Host-published `bridge-host` Kafka wire endpoint where `stream-replay-rs` produces records |
+| **Stage 3: Apache Iggy Broker** | `--iggy-url` | `IGGY_HTTP_URL` | `http://127.0.0.1:3000` | Apache Iggy HTTP API for `/ping` liveness, stream/topic provisioning, and WAL offset verification |
+| **Stage 4: Arroyo Processor** | `--arroyo-url` | `ARROYO_API_URL` | `http://127.0.0.1:5115` | Arroyo Control Plane API for `benchmark_ingestion` pipeline health and checkpoint status |
+| **Stage 5: Delta Lake / Query** | `--query-url` | `QUERY_SERVICE_URL` | `http://127.0.0.1:8085` | DataFusion Query Service HTTP API for querying `/data/delta/hpc_benchmarks` |
+| **Target Topic** | `--topic` | `BENCHMARK_TOPIC` | `benchmark.hpc_mqbench` | Target topic mapped to Iggy stream `benchmark`, topic `hpc_mqbench` (4 partitions) |
+
+---
+
+### End-to-End HPC Benchmark Reproduction Guide
+
+#### Prerequisites: Install `stream-replay-rs` & Provision the Stack
 
 ```bash
-# 1. Ensure stream-replay-rs CLI is installed
-cargo install stream-replay-rs # or cargo install --path ../stream-replay-rs
+# 1. Install the generic stream-replay-rs binary from the sibling submodule (or crates.io)
+cargo install --path ../stream-replay-rs
 
-# 2. Run the synthetic workload generator (Pure-Rust Cargo CLI, recommended cross-platform)
-cargo run --bin workload-generator -- --count 1000 --payload-size 1024 --partitions 4 --output /tmp/hpc_workload.jsonl
+# 2. Start the ferrous-streaming Docker Compose stack (Iggy, Iggy-Kafka Bridge, Arroyo, Delta Store, Query Service)
+docker compose up -d
 
-# (Legacy Python generator reference)
-# python benchmark/workload_generator.py --count 1000 --payload-size 1024 --partitions 4 > /tmp/hpc_workload.jsonl
+# 3. Provision streams/topics (including benchmark/hpc_mqbench), consumer groups (cg-arroyo-benchmark), and Arroyo SQL pipelines
+cargo run --bin streaming-admin -- all
+```
 
-# 3. Inject workload at fixed rate through the Iggy-Kafka bridge and run qualification verification
-python benchmark/run_hpc_benchmark.py --count 1000 --rate 25 --payload-size 1024
+#### Step 1: Generate the Synthetic HPC Benchmark Dataset (`workload-generator`)
+
+Generate a deterministic NDJSON workload file (`./hpc_workload.jsonl`) using the pure-Rust `workload-generator` binary:
+
+```bash
+# Generate 1,000 records of 1,024 bytes each distributed across 4 partitions
+cargo run --bin workload-generator -- \
+  --count 1000 \
+  --payload-size 1024 \
+  --partitions 4 \
+  --output ./hpc_workload.jsonl
+```
+
+Each line in `./hpc_workload.jsonl` is a byte-padded JSON object of exactly `--payload-size` bytes:
+```json
+{"run_id":"run-42a1b2c3d4e5","record_id":"run-42a1b2c3d4e5:00000000","seq":0,"partition":0,"client_timestamp_us":1731640000000000,"payload_size_bytes":1024,"data":"XXXX..."}
+```
+
+#### Step 2: Test Reading the HPC Dataset with `stream-replay-rs` (`--sink stdout` Dry-Run)
+
+Before sending traffic to a live broker, verify that `stream-replay-rs` reads `./hpc_workload.jsonl`, parses `client_timestamp_us` (microseconds), shifts event timestamps to current wall-clock time, and extracts `record_id` as the partition routing key:
+
+```bash
+# Option A: Use the turnkey benchmark replay profile and override the sink to stdout
+stream-replay-rs --config benchmark/replay-profile.toml --sink stdout
+
+# Option B: Specify all dataset and pacing flags explicitly on the command line
+stream-replay-rs \
+  --input-file-path ./hpc_workload.jsonl \
+  --sink stdout \
+  --timestamp-column client_timestamp_us \
+  --timestamp-unit us \
+  --key-column record_id \
+  --rate 25 \
+  --shift-timestamps
+```
+
+#### Step 3: Replay the HPC Dataset into `ferrous-streaming` with `stream-replay-rs`
+
+Stream `./hpc_workload.jsonl` into the `ferrous-streaming` stack through the host-published Iggy-Kafka Bridge (`127.0.0.1:9092`) into topic `benchmark.hpc_mqbench`:
+
+```bash
+# Option A: Replay using benchmark/replay-profile.toml (defaults to iggy @ 127.0.0.1:9092 -> benchmark.hpc_mqbench @ 25 msg/s)
+stream-replay-rs --config benchmark/replay-profile.toml
+
+# Option B: Replay with explicit server endpoint and rate overrides (e.g., Standard 1KB profile at 100 msg/s)
+stream-replay-rs \
+  --config benchmark/replay-profile.toml \
+  --input-file-path ./hpc_workload.jsonl \
+  --sink iggy \
+  --sink-url 127.0.0.1:9092 \
+  --topic benchmark.hpc_mqbench \
+  --rate 100
+
+# Option C: Multi-transport replay (requires stream-replay-rs compiled with --features full)
+# NATS JetStream:
+# stream-replay-rs --input-file-path ./hpc_workload.jsonl --sink nats --sink-url nats://127.0.0.1:4222 --topic benchmark.hpc_mqbench --rate 25
+# Fluvio SPU:
+# stream-replay-rs --input-file-path ./hpc_workload.jsonl --sink fluvio --sink-url 127.0.0.1:9003 --topic benchmark-hpc-mqbench --rate 25
+# Eclipse iceoryx2 zero-copy shared-memory IPC:
+# stream-replay-rs --input-file-path ./hpc_workload.jsonl --sink iceoryx2 --topic benchmark/hpc_mqbench --rate 25
+```
+
+#### Step 4: Run End-to-End Qualification Benchmark & Stage Reconciliation (`run-hpc-benchmark`)
+
+Run the pure-Rust `run-hpc-benchmark` binary to verify server endpoints, reconcile record counts across all 5 stages, and output the qualification-first latency report:
+
+```bash
+# 1. Live Stack Qualification Mode (probes --sink-url, --iggy-url, --arroyo-url, --query-url and reconciles ./hpc_workload.jsonl)
+cargo run --bin run-hpc-benchmark -- \
+  --input-file-path ./hpc_workload.jsonl \
+  --rate 25 \
+  --sink iggy \
+  --sink-url 127.0.0.1:9092 \
+  --iggy-url http://127.0.0.1:3000 \
+  --arroyo-url http://127.0.0.1:5115 \
+  --query-url http://127.0.0.1:8085 \
+  --topic benchmark.hpc_mqbench
+
+# 2. Offline / CI Qualification Verification Mode (no running Docker containers required)
+cargo run --bin run-hpc-benchmark -- \
+  --count 1000 \
+  --rate 25 \
+  --payload-size 1024 \
+  --offline
+
+# 3. Output machine-readable JSON qualification report (includes endpoints, replayer_command, accounting, and latencies_us)
+cargo run --bin run-hpc-benchmark -- \
+  --input-file-path ./hpc_workload.jsonl \
+  --rate 25 \
+  --offline \
+  --json
+
+# (Legacy Python runner with identical server endpoint flags)
+python benchmark/run_hpc_benchmark.py \
+  --count 1000 \
+  --rate 25 \
+  --payload-size 1024 \
+  --sink-url 127.0.0.1:9092 \
+  --iggy-url http://127.0.0.1:3000 \
+  --arroyo-url http://127.0.0.1:5115 \
+  --query-url http://127.0.0.1:8085 \
+  --offline
 ```
 
 ### Qualification-First Reporting & Bridge Hop Overhead
 
-A run is reported only when:
+A run is reported as `[QUALIFIED]` only when:
 $$N_{\text{sent}} = N_{\text{bridge}} = N_{\text{iggy}} = N_{\text{arroyo}} = N_{\text{delta}}$$
 
-with zero dropped records and zero duplicates. Runs that drop packets or suffer regressions are marked **`DISQUALIFIED`** or **`OVERDRIVEN`** and are not ranked.
+with zero dropped records and zero duplicates. Runs that drop packets or suffer regressions are marked **`DISQUALIFIED`** or **`OVERDRIVEN`** (exiting with code `1`) and are not ranked.
 
 The qualification report explicitly isolates and measures the **extra hop latency introduced by the Iggy–Kafka bridge** (OQ-9):
-* **Bridge Hop Latency:** Client send to bridge wire ingestion ($p_{50}$, $p_{95}$, $p_{99}$).
+* **Bridge Hop Latency:** Client send (`stream-replay-rs`) to bridge wire ingestion ($p_{50}$, $p_{95}$, $p_{99}$).
 * **Iggy Commit Latency:** Bridge to Iggy write-ahead log fsync ($<1\text{ms}$ per NFR-2).
-* **Arroyo Stream Latency:** Arroyo stream processor window processing ($<500\text{ms}$ per NFR-6).
-* **Delta Lake 2PC Latency:** Parquet micro-batch ACID commit.
+* **Arroyo Stream Latency:** Arroyo stream processor window processing via `cg-arroyo-benchmark` ($<500\text{ms}$ per NFR-6).
+* **Delta Lake 2PC Latency:** Parquet micro-batch ACID commit to `/data/delta/hpc_benchmarks`.
 
 Published third-party broker figures, with their conditions and caveats, are kept in [`docs/published-broker-figures.md`](docs/published-broker-figures.md). They are not results of this benchmark.
 

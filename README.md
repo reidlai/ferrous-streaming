@@ -160,9 +160,12 @@ How do `stream-replay-rs` and `run-hpc-benchmark` (or `benchmark/run_hpc_benchma
 
 #### Quickstart: 4-Step Live Stack Benchmark Workflow
 
-Ensure the Docker Compose stack is running (`docker compose up -d`) and `stream-replay-rs` is installed (`cargo install --path ../stream-replay-rs`), then run the 4-step workflow from `ferrous-streaming/`:
+Ensure the Docker Compose stack is running (`docker compose up -d`) and `stream-replay-rs` is installed (`cargo install --git https://github.com/reidlai/stream-replay-rs`), then run the 4-step workflow from `ferrous-streaming/`:
 
 ```bash
+# Install stream-replay-rs directly from GitHub
+cargo install --git https://github.com/reidlai/stream-replay-rs
+
 # 1. Provision streams/topics (orders + benchmark/hpc_mqbench), consumer groups, Delta logs, and Arroyo pipelines
 cargo run --bin streaming-admin -- all
 # -> [SUCCESS] All streaming stack components provisioned & verified!

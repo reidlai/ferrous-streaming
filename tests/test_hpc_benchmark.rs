@@ -257,6 +257,10 @@ fn test_readme_hpc_benchmark_documentation_completeness() {
             "{label} must reference 'benchmark/replay-profile.toml'"
         );
         assert!(
+            doc.contains("cargo install --git https://github.com/reidlai/stream-replay-rs"),
+            "{label} must document installing stream-replay-rs via 'cargo install --git https://github.com/reidlai/stream-replay-rs'"
+        );
+        assert!(
             doc.contains("stream-replay-rs --config benchmark/replay-profile.toml"),
             "{label} must document live dataset replay with 'stream-replay-rs --config benchmark/replay-profile.toml'"
         );

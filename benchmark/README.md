@@ -96,6 +96,9 @@ stream-replay-rs \
 ## 📊 Step 3: Run End-to-End Qualification Benchmark (`run-hpc-benchmark`)
 
 ```bash
+# Install stream-replay-rs directly from GitHub
+cargo install --git https://github.com/reidlai/stream-replay-rs
+
 # 1. Provision streams/topics (orders + benchmark/hpc_mqbench), consumer groups, Delta logs, and Arroyo pipelines
 cargo run --bin streaming-admin -- all
 # -> [SUCCESS] All streaming stack components provisioned & verified!

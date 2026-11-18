@@ -6,7 +6,7 @@
 
 [dataset]
 input_path = "./hpc_workload.jsonl"
-format = "json"
+format = "jsonl"
 timestamp_column = "client_timestamp_us"
 timestamp_unit = "us"
 partition_key = "record_id"

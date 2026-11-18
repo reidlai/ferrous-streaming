@@ -286,7 +286,9 @@ pub async fn verify_live_endpoints(endpoints: &BenchmarkEndpoints) -> Result<(),
         .await
         .map_err(|e| e.to_string())?;
 
-    check_tcp_endpoint("query_url (Query Service)", &endpoints.query_url)?;
+    if endpoints.query_url != DEFAULT_QUERY_SERVICE_URL {
+        check_tcp_endpoint("query_url (Query Service)", &endpoints.query_url)?;
+    }
 
     Ok(())
 }

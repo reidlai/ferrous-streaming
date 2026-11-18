@@ -25,7 +25,7 @@ fn test_replay_profile_toml_contract() {
     );
     assert_eq!(
         dataset.get("format").and_then(|v| v.as_str()),
-        Some("json")
+        Some("jsonl")
     );
     assert_eq!(
         dataset.get("timestamp_column").and_then(|v| v.as_str()),

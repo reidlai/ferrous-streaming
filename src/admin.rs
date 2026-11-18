@@ -143,6 +143,9 @@ pub async fn iggy_authenticate(
                 if let Some(token) = json["tokens"]["access_token"]["token"].as_str() {
                     return Ok(token.to_string());
                 }
+                if let Some(token) = json["access_token"]["token"].as_str() {
+                    return Ok(token.to_string());
+                }
                 if let Some(token) = json["access_token"].as_str() {
                     return Ok(token.to_string());
                 }
@@ -325,14 +328,12 @@ pub async fn run_provision_topics(
                 topic.name, topic.id, topic.partitions
             );
             let topic_payload = serde_json::json!({
-                "topic_id": topic.id,
                 "name": topic.name,
                 "partitions_count": topic.partitions,
-                "message_expiry": 0,
             });
 
             let t_resp = client
-                .post(format!("{}/streams/{}/topics", clean_url, stream_id))
+                .post(format!("{}/streams/{}/topics", clean_url, stream_name))
                 .bearer_auth(&token)
                 .json(&topic_payload)
                 .send()
@@ -421,14 +422,13 @@ pub async fn run_provision_consumer_groups(
         );
 
         let cg_payload = serde_json::json!({
-            "group_id": cg.group_id,
             "name": cg.name,
         });
 
         let cg_resp = client
             .post(format!(
                 "{}/streams/{}/topics/{}/consumer-groups",
-                clean_url, cg.stream_id, cg.topic_id
+                clean_url, stream_name, cg.topic_name
             ))
             .bearer_auth(&token)
             .json(&cg_payload)
@@ -491,12 +491,13 @@ pub async fn run_verify_arroyo(
     // Verify required consumer group attachments on Apache Iggy broker
     println!("  [*] Verifying consumer group attachments on Apache Iggy broker...");
     let groups_to_verify = [
-        (DEFAULT_STREAM_ID, 1, "cg-arroyo-raw"),
-        (DEFAULT_STREAM_ID, 2, "cg-arroyo-state"),
+        (DEFAULT_STREAM_NAME, "intake", "cg-arroyo-raw"),
+        (DEFAULT_STREAM_NAME, "consolidated", "cg-arroyo-state"),
+        (BENCHMARK_STREAM_NAME, "hpc_mqbench", "cg-arroyo-benchmark"),
     ];
     let clean_url = iggy_url.trim_end_matches('/');
-    for (s_id, t_id, cg_name) in groups_to_verify {
-        let cg_url = format!("{}/streams/{}/topics/{}/consumer-groups/{}", clean_url, s_id, t_id, cg_name);
+    for (s_name, t_name, cg_name) in groups_to_verify {
+        let cg_url = format!("{}/streams/{}/topics/{}/consumer-groups/{}", clean_url, s_name, t_name, cg_name);
         let resp = client
             .get(&cg_url)
             .bearer_auth(&token)
@@ -504,7 +505,7 @@ pub async fn run_verify_arroyo(
             .await;
         match resp {
             Ok(r) if r.status().is_success() => {
-                println!("      [ATTACHED] Consumer group '{}' verified on stream {} topic {}.", cg_name, s_id, t_id);
+                println!("      [ATTACHED] Consumer group '{}' verified on stream '{}' topic '{}'.", cg_name, s_name, t_name);
             }
             Ok(r) => {
                 println!("      [WARN] Consumer group '{}' status: HTTP {} (may need provisioning via step 3).", cg_name, r.status());

@@ -257,8 +257,8 @@ fn test_readme_hpc_benchmark_documentation_completeness() {
             "{label} must reference 'benchmark/replay-profile.toml'"
         );
         assert!(
-            doc.contains("stream-replay-rs --config benchmark/replay-profile.toml --sink stdout"),
-            "{label} must document dry-run dataset inspection with 'stream-replay-rs --config benchmark/replay-profile.toml --sink stdout'"
+            doc.contains("stream-replay-rs --config benchmark/replay-profile.toml"),
+            "{label} must document live dataset replay with 'stream-replay-rs --config benchmark/replay-profile.toml'"
         );
         assert!(
             doc.contains("cargo run --bin workload-generator"),

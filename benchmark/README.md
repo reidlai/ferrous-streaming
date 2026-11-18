@@ -78,13 +78,10 @@ The `data` field is dynamically padded with `'X'` characters so that the entire 
 `benchmark/replay-profile.toml` is a turnkey `stream-replay-rs` configuration file that maps `client_timestamp_us` (`us`) and `record_id` to `benchmark.hpc_mqbench` on `127.0.0.1:9092`:
 
 ```bash
-# 1. Dry-run inspection to stdout (verifies JSONL parsing and timestamp shifting without a broker)
-stream-replay-rs --config benchmark/replay-profile.toml --sink stdout
-
-# 2. Live replay into the ferrous-streaming stack via the Iggy-Kafka Bridge (127.0.0.1:9092)
+# 1. Live replay into the ferrous-streaming stack via the Iggy-Kafka Bridge (127.0.0.1:9092)
 stream-replay-rs --config benchmark/replay-profile.toml
 
-# 3. Live replay with explicit CLI endpoint and rate overrides
+# 2. Live replay with explicit CLI endpoint and rate overrides
 stream-replay-rs \
   --config benchmark/replay-profile.toml \
   --input-file-path ./hpc_workload.jsonl \

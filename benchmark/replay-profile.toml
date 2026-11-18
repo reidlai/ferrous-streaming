@@ -1,7 +1,6 @@
 # FerrousCX HPC-MQBench Replay Profile for `stream-replay-rs` (FR-32, SM-8)
 # Usage:
 #   stream-replay-rs --config benchmark/replay-profile.toml
-#   stream-replay-rs --config benchmark/replay-profile.toml --sink stdout
 #   stream-replay-rs --config benchmark/replay-profile.toml --sink-url 127.0.0.1:9092 --rate 100
 
 [dataset]

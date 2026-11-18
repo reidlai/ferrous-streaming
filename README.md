@@ -251,28 +251,7 @@ Stage Latencies (microseconds) & Bridge Hop Overhead (FR-33, OQ-9):
 
 ---
 
-#### Additional CLI Reference & Advanced Replay Options
-
-##### Dry-Run Inspection of the HPC Dataset (`--sink stdout`)
-
-Before sending traffic to a live broker, you can inspect how `stream-replay-rs` parses `./hpc_workload.jsonl`, shifts `client_timestamp_us` (microseconds) to current wall-clock time, and extracts `record_id` as the partition key:
-
-```bash
-# Option A: Use the turnkey benchmark replay profile and override the sink to stdout
-stream-replay-rs --config benchmark/replay-profile.toml --sink stdout
-
-# Option B: Specify all dataset and pacing flags explicitly on the command line
-stream-replay-rs \
-  --input-file-path ./hpc_workload.jsonl \
-  --sink stdout \
-  --timestamp-column client_timestamp_us \
-  --timestamp-unit us \
-  --key-column record_id \
-  --rate 25 \
-  --shift-timestamps
-```
-
-##### Custom Endpoint, Rate & Multi-Transport Replay Overrides
+#### Additional CLI Reference & Replay Options
 
 ```bash
 # Replay with explicit server endpoint and rate overrides (e.g., Standard 1KB profile at 100 msg/s)

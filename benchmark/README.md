@@ -99,26 +99,62 @@ stream-replay-rs \
 ## 📊 Step 3: Run End-to-End Qualification Benchmark (`run-hpc-benchmark`)
 
 ```bash
-# 1. Live stack qualification (probes --sink-url, --iggy-url, --arroyo-url, --query-url)
-cargo run --bin run-hpc-benchmark -- \
-  --input-file-path ./hpc_workload.jsonl \
-  --rate 25 \
-  --sink iggy \
-  --sink-url 127.0.0.1:9092 \
-  --iggy-url http://127.0.0.1:3000 \
-  --arroyo-url http://127.0.0.1:5115 \
-  --query-url http://127.0.0.1:8085
+# 1. Provision streams/topics (orders + benchmark/hpc_mqbench), consumer groups, Delta logs, and Arroyo pipelines
+cargo run --bin streaming-admin -- all
+# -> [SUCCESS] All streaming stack components provisioned & verified!
 
-# 2. Offline / CI qualification verification (no running Docker containers required)
-cargo run --bin run-hpc-benchmark -- \
-  --count 1000 \
-  --rate 25 \
-  --payload-size 1024 \
-  --offline
+# 2. Generate synthetic HPC workload dataset
+cargo run --bin workload-generator -- --count 1000 --payload-size 1024 --partitions 4 --output ./hpc_workload.jsonl
 
-# 3. JSON qualification report
-cargo run --bin run-hpc-benchmark -- --input-file-path ./hpc_workload.jsonl --offline --json
+# 3. Replay dataset into live Iggy-Kafka Bridge (127.0.0.1:9092 -> benchmark.hpc_mqbench)
+stream-replay-rs --config benchmark/replay-profile.toml
+
+# 4. Run live HPC qualification benchmark
+cargo run --bin run-hpc-benchmark -- --input-file-path ./hpc_workload.jsonl --rate 25
+# -> Mode: live | Status: [QUALIFIED]
 ```
+
+### Sample Qualification Output
+
+```text
+========================================================================
+ FerrousCX Public Platform Benchmark Report (HPC-MQBench Model)
+ Run ID:   run-d90a361eba5b
+ Topic:    benchmark.hpc_mqbench
+ Mode:     live
+ Status:   [QUALIFIED]
+========================================================================
+Server Endpoints & stream-replay-rs Command:
+  - Sink Type:           iggy
+  - Bridge / Sink URL:   127.0.0.1:9092
+  - Apache Iggy URL:     http://127.0.0.1:3000
+  - Arroyo API URL:      http://127.0.0.1:5115
+  - Query Service URL:   http://127.0.0.1:8085
+  - Replay Command:      stream-replay-rs --config benchmark/replay-profile.toml --input-file-path ./hpc_workload.jsonl --sink iggy --sink-url 127.0.0.1:9092 --topic benchmark.hpc_mqbench --rate 25
+
+Workload Parameters:
+  - Configured Rate:     25 msg/sec
+  - Payload Size:        1024 bytes
+  - Partitions:          4
+  - Total Ingest Count:  1000
+  - Achieved Rate:       89856.95 msg/sec
+
+Qualification Accounting Across Stages (FR-32):
+  1. Ingest Sent:        1000
+  2. Bridge Accepted:    1000
+  3. Apache Iggy:        1000
+  4. Arroyo Processor:   1000
+  5. Delta Lake 2PC:     1000 (Distinct: 1000)
+
+Stage Latencies (microseconds) & Bridge Hop Overhead (FR-33, OQ-9):
+  - Bridge Hop (OQ-9):   p50=474.5us, p95=587us, p99=597us, max=599us
+  - Iggy WAL Commit:     p50=649.5us, p95=785us, p99=797us, max=799us
+  - Arroyo Stream:       p50=2595.5us, p95=2958.05us, p99=2991.01us, max=2999us
+  - Total End-to-End:    p50=17701us, p95=19580.1us, p99=19858.26us, max=20242us
+========================================================================
+```
+
+See [`../README.md`](../README.md#understanding-the-benchmark-report) for a detailed section-by-section explanation of this report.
 
 ---
 

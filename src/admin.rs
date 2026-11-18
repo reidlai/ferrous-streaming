@@ -742,13 +742,40 @@ pub async fn run_deploy_pipelines(
 
     for (spec, _, sql) in &resolved_sqls {
         println!("\n  [*] Deploying Arroyo pipeline '{}'...", spec.name);
-        let already_exists = existing_pipelines.iter().any(|p| {
+        if let Some(existing) = existing_pipelines.iter().find(|p| {
             p.get("name").and_then(|n| n.as_str()) == Some(spec.name)
-        });
+        }) {
+            let pid = existing.get("id").and_then(|id| id.as_str()).unwrap_or("");
+            let mut is_failed = false;
+            if !pid.is_empty() {
+                let jobs_url = format!("{}/api/v1/pipelines/{}/jobs", clean_url, pid);
+                if let Ok(j_resp) = client.get(&jobs_url).send().await {
+                    if let Ok(j_json) = j_resp.json::<serde_json::Value>().await {
+                        if let Some(jobs) = j_json.get("data").and_then(|d| d.as_array()) {
+                            is_failed = jobs.iter().any(|j| {
+                                matches!(
+                                    j.get("state").and_then(|s| s.as_str()),
+                                    Some("Failed") | Some("Stopped") | Some("Finishing")
+                                )
+                            });
+                        }
+                    }
+                }
+            }
 
-        if already_exists {
-            println!("      [EXISTS] Pipeline '{}' already active on Arroyo.", spec.name);
-            continue;
+            if is_failed && !pid.is_empty() {
+                println!(
+                    "      [RECOVER] Pipeline '{}' ({}) is in Failed/Stopped state; recreating...",
+                    spec.name, pid
+                );
+                let _ = client
+                    .delete(format!("{}/api/v1/pipelines/{}", clean_url, pid))
+                    .send()
+                    .await;
+            } else {
+                println!("      [EXISTS] Pipeline '{}' already active on Arroyo.", spec.name);
+                continue;
+            }
         }
 
         let payload = serde_json::json!({

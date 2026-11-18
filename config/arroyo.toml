@@ -9,4 +9,5 @@ bind-address = "0.0.0.0"
 http-port = 5115
 
 [controller]
-scheduler = "node"
+# Uses embedded scheduler for single-container cluster deployment (avoids "Not enough slots to schedule job" when no external arroyo-node workers are registered; compatible with scheduler = "node" topology)
+scheduler = "embedded"

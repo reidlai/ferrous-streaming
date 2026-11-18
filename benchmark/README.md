@@ -119,7 +119,7 @@ cargo run --bin run-hpc-benchmark -- --input-file-path ./hpc_workload.jsonl --ra
 ```text
 ========================================================================
  FerrousCX Public Platform Benchmark Report (HPC-MQBench Model)
- Run ID:   run-d90a361eba5b
+ Run ID:   run-46c230d743cd
  Topic:    benchmark.hpc_mqbench
  Mode:     live
  Status:   [QUALIFIED]
@@ -137,7 +137,7 @@ Workload Parameters:
   - Payload Size:        1024 bytes
   - Partitions:          4
   - Total Ingest Count:  1000
-  - Achieved Rate:       89856.95 msg/sec
+  - Achieved Rate:       58413.6 msg/sec
 
 Qualification Accounting Across Stages (FR-32):
   1. Ingest Sent:        1000

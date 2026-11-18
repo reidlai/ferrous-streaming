@@ -188,7 +188,7 @@ Running Step 4 (`cargo run --bin run-hpc-benchmark -- --input-file-path ./hpc_wo
 ```text
 ========================================================================
  FerrousCX Public Platform Benchmark Report (HPC-MQBench Model)
- Run ID:   run-d90a361eba5b
+ Run ID:   run-46c230d743cd
  Topic:    benchmark.hpc_mqbench
  Mode:     live
  Status:   [QUALIFIED]
@@ -206,7 +206,7 @@ Workload Parameters:
   - Payload Size:        1024 bytes
   - Partitions:          4
   - Total Ingest Count:  1000
-  - Achieved Rate:       89856.95 msg/sec
+  - Achieved Rate:       58413.6 msg/sec
 
 Qualification Accounting Across Stages (FR-32):
   1. Ingest Sent:        1000
@@ -226,7 +226,7 @@ Stage Latencies (microseconds) & Bridge Hop Overhead (FR-33, OQ-9):
 #### Understanding the Benchmark Report
 
 1. **Header & Run Status (`Run ID`, `Topic`, `Mode`, `Status`):**
-   - **`Run ID: run-d90a361eba5b`:** Extracted directly from the `run_id` field of the NDJSON records inside `./hpc_workload.jsonl` (`run-d90a361eba5b:00000000` ... `run-d90a361eba5b:00000999`).
+   - **`Run ID: run-46c230d743cd`:** Extracted directly from the `run_id` field of the NDJSON records inside `./hpc_workload.jsonl` (`run-46c230d743cd:00000000` ... `run-46c230d743cd:00000999`). Every time `workload-generator` runs without an explicit `--run-id`, a new UUID-based `run_id` is generated.
    - **`Topic: benchmark.hpc_mqbench`:** The Kafka topic name mapped by `config/bridge/topic-map.toml` to Apache Iggy stream `benchmark`, topic `hpc_mqbench`.
    - **`Mode: live`:** Confirms that `run-hpc-benchmark` actively probed and verified your live running Docker containers (`127.0.0.1:9092` for `bridge-host`, `http://127.0.0.1:3000/ping` for `iggy-broker`, and `http://127.0.0.1:5115/api/v1/ping` for `arroyo`) before executing.
    - **`Status: [QUALIFIED]`:** Under the **HPC-MQBench qualification-first rule** (FR-32), a run counts (`[QUALIFIED]`) only if **100% of sent records** are accounted for across all 5 stages with **0 dropped records** and **0 duplicates**.
@@ -236,14 +236,14 @@ Stage Latencies (microseconds) & Bridge Hop Overhead (FR-33, OQ-9):
 
 3. **Workload Parameters (`Configured Rate` vs. `Achieved Rate`):**
    - **`Total Ingest Count: 1000` & `Payload Size: 1024 bytes`:** Read 1,000 NDJSON records of 1 KB each from `./hpc_workload.jsonl`, distributed round-robin across **`4` partitions** (`0..3`).
-   - **Why is `Achieved Rate: 89856.95 msg/sec` when `Configured Rate` is `25 msg/sec`?**
+   - **Why is `Achieved Rate: 58413.6 msg/sec` when `Configured Rate` is `25 msg/sec` (and why does `Achieved Rate` vary between runs)?**
      - `stream-replay-rs` (Step 3) is the **rate-paced network traffic replayer** that throttles wire emission to `25 msg/sec` (~40 seconds for 1,000 records).
-     - `run-hpc-benchmark` (Step 4) is the **reconciliation & qualification verifier**: it loads the 1,000 records from `./hpc_workload.jsonl` into memory and evaluates the 5-stage qualification reconciliation in ~11.1 milliseconds (`1000 / 0.01113s ≈ 89,856.95 records/sec`).
+     - `run-hpc-benchmark` (Step 4) is the **reconciliation & qualification verifier**: it loads the 1,000 records from `./hpc_workload.jsonl` into memory and evaluates the 5-stage qualification reconciliation in ~17.1 milliseconds (`1000 / 0.01712s ≈ 58,413.6 records/sec`), so `Achieved Rate` fluctuates slightly between runs based on host file I/O timing.
 
 4. **Qualification Accounting Across Stages (FR-32):**
    - Verifies the strict conservation invariant:
      $$N_{\text{sent}} (1000) = N_{\text{bridge}} (1000) = N_{\text{iggy}} (1000) = N_{\text{arroyo}} (1000) = N_{\text{delta}} (1000)$$
-   - **`Distinct: 1000`:** Confirms every `record_id` (`run-d90a361eba5b:00000000` through `00000999`) is unique at the Delta Lake sink—certifying zero duplicates and zero data loss.
+   - **`Distinct: 1000`:** Confirms every `record_id` (`run-46c230d743cd:00000000` through `00000999`) is unique at the Delta Lake sink—certifying zero duplicates and zero data loss.
 
 5. **Stage Latencies (microseconds) & Bridge Hop Overhead (FR-33, OQ-9):**
    - All latency figures are reported in **microseconds (`us`)** ($1,000\,\mu\text{s} = 1\,\text{ms}$):

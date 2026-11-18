@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-run_hpc_benchmark.py: Public reproducible benchmark runner for FerrousCX (Story 3.11, FR-32, FR-33, OQ-9).
+run_hpc_benchmark.py: Public reproducible benchmark runner for FerrousCX (Story 3.11, Story 15.1, FR-32, FR-33, OQ-9, SM-8).
 
 Executes qualification-first HPC platform ingestion benchmarks, accounting for every record
 across all 5 ingestion stages:
-  1. Client Replayer Ingest (Sent)
-  2. Iggy-Kafka Bridge Hop (Accepted by bridge)
-  3. Apache Iggy Broker (Fsync & stored)
-  4. Arroyo Stream Processor (Consumed via cg-arroyo-benchmark)
-  5. Delta Lake Store (Committed via 2PC micro-batch)
+  1. Client Replayer Ingest (stream-replay-rs / Sent)
+  2. Iggy-Kafka Bridge Hop (--sink-url, default 127.0.0.1:9092)
+  3. Apache Iggy Broker (--iggy-url, default http://127.0.0.1:3000)
+  4. Arroyo Stream Processor (--arroyo-url, default http://127.0.0.1:5115)
+  5. Delta Lake Store / Query Service (--query-url, default http://127.0.0.1:8085)
 
 Reports qualification-first results: a run counts only when N_sent == N_bridge == N_iggy == N_arroyo == N_delta.
 Measures and reports the latency added by the Iggy-Kafka bridge extra hop (FR-33, OQ-9).
@@ -22,7 +22,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BENCHMARK_DIR.parent
@@ -68,6 +68,14 @@ class HPCBenchmarkRunner:
         topic: str = "benchmark.hpc_mqbench",
         simulate_loss_rate: float = 0.0,
         simulate_dup_rate: float = 0.0,
+        sink: str = "iggy",
+        sink_url: Optional[str] = None,
+        iggy_url: Optional[str] = None,
+        arroyo_url: Optional[str] = None,
+        query_url: Optional[str] = None,
+        input_file_path: Optional[str] = None,
+        config_path: str = "benchmark/replay-profile.toml",
+        offline: bool = True,
     ):
         self.run_id = run_id or f"hpc-{uuid.uuid4().hex[:12]}"
         self.rate_msg_sec = rate_msg_sec
@@ -77,20 +85,52 @@ class HPCBenchmarkRunner:
         self.topic = topic
         self.simulate_loss_rate = simulate_loss_rate
         self.simulate_dup_rate = simulate_dup_rate
+        self.sink = sink
+        self.sink_url = sink_url or os.environ.get("BRIDGE_URL", "127.0.0.1:9092")
+        self.iggy_url = iggy_url or os.environ.get("IGGY_HTTP_URL", "http://127.0.0.1:3000")
+        self.arroyo_url = arroyo_url or os.environ.get("ARROYO_API_URL", "http://127.0.0.1:5115")
+        self.query_url = query_url or os.environ.get("QUERY_SERVICE_URL", "http://127.0.0.1:8085")
+        self.input_file_path = input_file_path
+        self.config_path = config_path
+        self.offline = offline
+
+    def build_replayer_command(self) -> str:
+        input_flag = f" --input-file-path {self.input_file_path}" if self.input_file_path else ""
+        return (
+            f"stream-replay-rs --config {self.config_path}{input_flag}"
+            f" --sink {self.sink} --sink-url {self.sink_url}"
+            f" --topic {self.topic} --rate {self.rate_msg_sec}"
+        )
+
+    def _load_records(self) -> List[Dict[str, Any]]:
+        if self.input_file_path:
+            p = Path(self.input_file_path)
+            if not p.is_file():
+                raise FileNotFoundError(f"Workload input file not found: '{self.input_file_path}'")
+            records: List[Dict[str, Any]] = []
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        records.append(json.loads(stripped))
+            if not records:
+                raise ValueError(f"Workload input file '{self.input_file_path}' contained 0 records")
+            return records
+        return list(
+            generate_workload_stream(
+                run_id=self.run_id,
+                total_records=self.total_records,
+                payload_size_bytes=self.payload_size_bytes,
+                num_partitions=self.partitions,
+            )
+        )
 
     def run_synthetic_benchmark(self) -> Dict[str, Any]:
         """Execute benchmark run with stage-by-stage reconciliation."""
         start_wall_time = time.time()
         
         # Stage 1: Client Send
-        client_records: List[Dict[str, Any]] = []
-        for r in generate_workload_stream(
-            run_id=self.run_id,
-            total_records=self.total_records,
-            payload_size_bytes=self.payload_size_bytes,
-            num_partitions=self.partitions,
-        ):
-            client_records.append(r)
+        client_records: List[Dict[str, Any]] = self._load_records()
         
         # Stage 2: Iggy-Kafka Bridge Ingress
         bridge_records: List[Dict[str, Any]] = []
@@ -179,12 +219,21 @@ class HPCBenchmarkRunner:
         return {
             "run_id": self.run_id,
             "topic": self.topic,
+            "mode": "offline" if self.offline else "live",
             "status": status,
             "disqualification_reason": disqualification_reason,
+            "endpoints": {
+                "sink": self.sink,
+                "sink_url": self.sink_url,
+                "iggy_url": self.iggy_url,
+                "arroyo_url": self.arroyo_url,
+                "query_url": self.query_url,
+            },
+            "replayer_command": self.build_replayer_command(),
             "workload": {
                 "rate_msg_sec": self.rate_msg_sec,
                 "payload_size_bytes": self.payload_size_bytes,
-                "total_records": self.total_records,
+                "total_records": n_sent,
                 "partitions": self.partitions,
                 "elapsed_seconds": round(elapsed_sec, 3),
                 "achieved_tps": round(n_sent / max(0.001, elapsed_sec), 2)
@@ -217,6 +266,18 @@ def format_report(result: Dict[str, Any]) -> str:
     if result["disqualification_reason"]:
         lines.append(f" Reason:   {result['disqualification_reason']}")
     lines.append("=" * 72)
+
+    if "endpoints" in result:
+        ep = result["endpoints"]
+        lines.append("Server Endpoints & stream-replay-rs Command:")
+        lines.append(f"  - Sink Type:           {ep.get('sink', 'iggy')}")
+        lines.append(f"  - Bridge / Sink URL:   {ep.get('sink_url', '127.0.0.1:9092')}")
+        lines.append(f"  - Apache Iggy URL:     {ep.get('iggy_url', 'http://127.0.0.1:3000')}")
+        lines.append(f"  - Arroyo API URL:      {ep.get('arroyo_url', 'http://127.0.0.1:5115')}")
+        lines.append(f"  - Query Service URL:   {ep.get('query_url', 'http://127.0.0.1:8085')}")
+        if "replayer_command" in result:
+            lines.append(f"  - Replay Command:      {result['replayer_command']}")
+        lines.append("")
     
     wk = result["workload"]
     lines.append("Workload Parameters:")
@@ -263,6 +324,15 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output JSON results")
     parser.add_argument("--simulate-loss", type=float, default=0.0, help="Simulate drop fraction for testing (e.g. 0.05)")
     parser.add_argument("--simulate-dup", type=float, default=0.0, help="Simulate duplicate fraction for testing")
+    parser.add_argument("--sink", type=str, default="iggy", help="stream-replay-rs sink type (default: iggy)")
+    parser.add_argument("--sink-url", type=str, default=os.environ.get("BRIDGE_URL", "127.0.0.1:9092"), help="Bridge / broker URL (default: 127.0.0.1:9092)")
+    parser.add_argument("--iggy-url", type=str, default=os.environ.get("IGGY_HTTP_URL", "http://127.0.0.1:3000"), help="Apache Iggy HTTP API URL (default: http://127.0.0.1:3000)")
+    parser.add_argument("--arroyo-url", type=str, default=os.environ.get("ARROYO_API_URL", "http://127.0.0.1:5115"), help="Arroyo API URL (default: http://127.0.0.1:5115)")
+    parser.add_argument("--query-url", type=str, default=os.environ.get("QUERY_SERVICE_URL", "http://127.0.0.1:8085"), help="Query Service URL (default: http://127.0.0.1:8085)")
+    parser.add_argument("--topic", type=str, default=os.environ.get("BENCHMARK_TOPIC", "benchmark.hpc_mqbench"), help="Benchmark topic (default: benchmark.hpc_mqbench)")
+    parser.add_argument("-i", "--input-file-path", type=str, default="", help="Optional pre-generated NDJSON workload file")
+    parser.add_argument("-c", "--config", type=str, default="benchmark/replay-profile.toml", help="stream-replay-rs profile TOML path")
+    parser.add_argument("--offline", "--dry-run", action="store_true", default=True, help="Run offline deterministic qualification verification")
     
     args = parser.parse_args()
     
@@ -272,8 +342,17 @@ def main():
         payload_size_bytes=args.payload_size,
         total_records=args.count,
         partitions=args.partitions,
+        topic=args.topic,
         simulate_loss_rate=args.simulate_loss,
         simulate_dup_rate=args.simulate_dup,
+        sink=args.sink,
+        sink_url=args.sink_url,
+        iggy_url=args.iggy_url,
+        arroyo_url=args.arroyo_url,
+        query_url=args.query_url,
+        input_file_path=args.input_file_path or None,
+        config_path=args.config,
+        offline=args.offline,
     )
     
     res = runner.run_synthetic_benchmark()
@@ -288,4 +367,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

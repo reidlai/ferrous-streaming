@@ -7,6 +7,8 @@ pub const DEFAULT_IGGY_URL: &str = "http://localhost:3000";
 pub const DEFAULT_ARROYO_URL: &str = "http://localhost:5115";
 pub const DEFAULT_STREAM_NAME: &str = "orders";
 pub const DEFAULT_STREAM_ID: u32 = 1;
+pub const BENCHMARK_STREAM_NAME: &str = "benchmark";
+pub const BENCHMARK_STREAM_ID: u32 = 2;
 
 /// Topic specification matching contracts/topics.yml
 #[derive(Debug, Clone)]
@@ -31,6 +33,13 @@ pub const STREAMING_TOPICS: &[TopicSpec] = &[
         description: "CQRS-ES domain state projections and validated entity events (immediate fsync)",
     },
 ];
+
+pub const BENCHMARK_TOPICS: &[TopicSpec] = &[TopicSpec {
+    id: 1,
+    name: "hpc_mqbench",
+    partitions: 4,
+    description: "HPC-MQBench qualification-first synthetic benchmark stream (immediate fsync)",
+}];
 
 /// Consumer group specification
 #[derive(Debug, Clone)]
@@ -68,6 +77,14 @@ pub const CONSUMER_GROUPS: &[ConsumerGroupSpec] = &[
         name: "cg-arroyo-state",
         description: "State snapshot consolidator updating Delta Lake orders_current_state",
     },
+    ConsumerGroupSpec {
+        stream_id: 2,
+        topic_id: 1,
+        topic_name: "hpc_mqbench",
+        group_id: 1,
+        name: "cg-arroyo-benchmark",
+        description: "Arroyo benchmark ingestion pipeline streaming into Delta Lake hpc_benchmarks",
+    },
 ];
 
 /// Pipeline specification
@@ -91,6 +108,12 @@ pub const PIPELINES: &[PipelineSpec] = &[
         filename: "state_snapshot_consolidator.sql",
         delta_table_name: "orders_current_state",
         consumer_group: "cg-arroyo-state",
+    },
+    PipelineSpec {
+        name: "benchmark_ingestion",
+        filename: "benchmark_ingestion.sql",
+        delta_table_name: "hpc_benchmarks",
+        consumer_group: "cg-arroyo-benchmark",
     },
 ];
 
@@ -233,6 +256,17 @@ pub async fn run_provision_topics(
             );
             println!("          Description: {}", topic.description);
         }
+        println!(
+            "  [AUDIT] Validated stream '{}' (id: {}) specification.",
+            BENCHMARK_STREAM_NAME, BENCHMARK_STREAM_ID
+        );
+        for topic in BENCHMARK_TOPICS {
+            println!(
+                "  [AUDIT] Validated topic '{}' (id: {}, partitions: {}, fsync: immediate)",
+                topic.name, topic.id, topic.partitions
+            );
+            println!("          Description: {}", topic.description);
+        }
         println!("\n  [OK] Topics and partition durability verified in dry-run mode.");
         return Ok(());
     }
@@ -247,60 +281,85 @@ pub async fn run_provision_topics(
 
     let clean_url = iggy_url.trim_end_matches('/');
 
-    // 1. Ensure Stream
-    println!("\n  [*] Ensuring stream '{}' (id: {})...", DEFAULT_STREAM_NAME, DEFAULT_STREAM_ID);
-    let stream_payload = serde_json::json!({
-        "stream_id": DEFAULT_STREAM_ID,
-        "name": DEFAULT_STREAM_NAME,
-    });
-
-    let s_resp = client
-        .post(format!("{}/streams", clean_url))
-        .bearer_auth(&token)
-        .json(&stream_payload)
-        .send()
-        .await?;
-
-    let s_status = s_resp.status();
-    if s_status.is_success() {
-        println!("      [CREATED] Stream '{}' (id: {})", DEFAULT_STREAM_NAME, DEFAULT_STREAM_ID);
-    } else if s_status == reqwest::StatusCode::BAD_REQUEST || s_status == reqwest::StatusCode::CONFLICT {
-        let err_text = s_resp.text().await.unwrap_or_default();
-        println!("      [EXISTS] Stream '{}' already exists (status: {}, info: {})", DEFAULT_STREAM_NAME, s_status, err_text.trim());
-    } else {
-        let err_text = s_resp.text().await.unwrap_or_default();
-        return Err(format!("Failed to create stream '{}': HTTP {} ({})", DEFAULT_STREAM_NAME, s_status, err_text).into());
-    }
-
-    // 2. Ensure Topics
-    for topic in STREAMING_TOPICS {
-        println!(
-            "\n  [*] Ensuring topic '{}' (id: {}, partitions: {})...",
-            topic.name, topic.id, topic.partitions
-        );
-        let topic_payload = serde_json::json!({
-            "topic_id": topic.id,
-            "name": topic.name,
-            "partitions_count": topic.partitions,
-            "message_expiry": 0,
+    // 1. Ensure Streams & Topics
+    for (stream_id, stream_name, topics) in [
+        (DEFAULT_STREAM_ID, DEFAULT_STREAM_NAME, STREAMING_TOPICS),
+        (BENCHMARK_STREAM_ID, BENCHMARK_STREAM_NAME, BENCHMARK_TOPICS),
+    ] {
+        println!("\n  [*] Ensuring stream '{}' (id: {})...", stream_name, stream_id);
+        let stream_payload = serde_json::json!({
+            "stream_id": stream_id,
+            "name": stream_name,
         });
 
-        let t_resp = client
-            .post(format!("{}/streams/{}/topics", clean_url, DEFAULT_STREAM_ID))
+        let s_resp = client
+            .post(format!("{}/streams", clean_url))
             .bearer_auth(&token)
-            .json(&topic_payload)
+            .json(&stream_payload)
             .send()
             .await?;
 
-        let t_status = t_resp.status();
-        if t_status.is_success() {
-            println!("      [CREATED] Topic '{}' with {} partitions (fsync: immediate)", topic.name, topic.partitions);
-        } else if t_status == reqwest::StatusCode::BAD_REQUEST || t_status == reqwest::StatusCode::CONFLICT {
-            let err_text = t_resp.text().await.unwrap_or_default();
-            println!("      [EXISTS] Topic '{}' already exists (status: {}, info: {})", topic.name, t_status, err_text.trim());
+        let s_status = s_resp.status();
+        if s_status.is_success() {
+            println!("      [CREATED] Stream '{}' (id: {})", stream_name, stream_id);
+        } else if s_status == reqwest::StatusCode::BAD_REQUEST || s_status == reqwest::StatusCode::CONFLICT {
+            let err_text = s_resp.text().await.unwrap_or_default();
+            println!(
+                "      [EXISTS] Stream '{}' already exists (status: {}, info: {})",
+                stream_name,
+                s_status,
+                err_text.trim()
+            );
         } else {
-            let err_text = t_resp.text().await.unwrap_or_default();
-            return Err(format!("Failed to create topic '{}': HTTP {} ({})", topic.name, t_status, err_text).into());
+            let err_text = s_resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Failed to create stream '{}': HTTP {} ({})",
+                stream_name, s_status, err_text
+            )
+            .into());
+        }
+
+        for topic in topics {
+            println!(
+                "\n  [*] Ensuring topic '{}' (id: {}, partitions: {})...",
+                topic.name, topic.id, topic.partitions
+            );
+            let topic_payload = serde_json::json!({
+                "topic_id": topic.id,
+                "name": topic.name,
+                "partitions_count": topic.partitions,
+                "message_expiry": 0,
+            });
+
+            let t_resp = client
+                .post(format!("{}/streams/{}/topics", clean_url, stream_id))
+                .bearer_auth(&token)
+                .json(&topic_payload)
+                .send()
+                .await?;
+
+            let t_status = t_resp.status();
+            if t_status.is_success() {
+                println!(
+                    "      [CREATED] Topic '{}' with {} partitions (fsync: immediate)",
+                    topic.name, topic.partitions
+                );
+            } else if t_status == reqwest::StatusCode::BAD_REQUEST || t_status == reqwest::StatusCode::CONFLICT {
+                let err_text = t_resp.text().await.unwrap_or_default();
+                println!(
+                    "      [EXISTS] Topic '{}' already exists (status: {}, info: {})",
+                    topic.name,
+                    t_status,
+                    err_text.trim()
+                );
+            } else {
+                let err_text = t_resp.text().await.unwrap_or_default();
+                return Err(format!(
+                    "Failed to create topic '{}': HTTP {} ({})",
+                    topic.name, t_status, err_text
+                )
+                .into());
+            }
         }
     }
 
@@ -325,9 +384,14 @@ pub async fn run_provision_consumer_groups(
     if dry_run {
         println!("\n  [INFO] Running in --dry-run mode (skipping live broker mutation).");
         for cg in CONSUMER_GROUPS {
+            let stream_name = if cg.stream_id == BENCHMARK_STREAM_ID {
+                BENCHMARK_STREAM_NAME
+            } else {
+                DEFAULT_STREAM_NAME
+            };
             println!(
                 "  [AUDIT] Validated consumer group '{}' (id: {}) on topic '{}/{}'",
-                cg.name, cg.group_id, DEFAULT_STREAM_NAME, cg.topic_name
+                cg.name, cg.group_id, stream_name, cg.topic_name
             );
             println!("          Description: {}", cg.description);
         }
@@ -346,9 +410,14 @@ pub async fn run_provision_consumer_groups(
     let clean_url = iggy_url.trim_end_matches('/');
 
     for cg in CONSUMER_GROUPS {
+        let stream_name = if cg.stream_id == BENCHMARK_STREAM_ID {
+            BENCHMARK_STREAM_NAME
+        } else {
+            DEFAULT_STREAM_NAME
+        };
         println!(
             "\n  [*] Ensuring consumer group '{}' (id: {}) on topic '{}/{}'...",
-            cg.name, cg.group_id, DEFAULT_STREAM_NAME, cg.topic_name
+            cg.name, cg.group_id, stream_name, cg.topic_name
         );
 
         let cg_payload = serde_json::json!({
@@ -526,6 +595,28 @@ pub fn init_delta_storage(delta_dir: &Path) -> Result<(), Box<dyn std::error::Er
                         ]
                     }),
                     vec!["event_timestamp"],
+                    serde_json::json!({
+                        "delta.appendOnly": "true",
+                        "delta.autoOptimize.autoCompact": "true",
+                        "delta.autoOptimize.optimizeWrite": "true",
+                    }),
+                )
+            } else if spec.delta_table_name == "hpc_benchmarks" {
+                (
+                    serde_json::json!({
+                        "type": "struct",
+                        "fields": [
+                            {"name": "run_id", "type": "string", "nullable": false, "metadata": {"description": "Benchmark run identifier"}},
+                            {"name": "record_id", "type": "string", "nullable": false, "metadata": {"description": "Unique benchmark record identifier"}},
+                            {"name": "seq", "type": "long", "nullable": false, "metadata": {"description": "Monotonic sequence number"}},
+                            {"name": "payload_size_bytes", "type": "integer", "nullable": false, "metadata": {"description": "Target payload size in bytes"}},
+                            {"name": "partition", "type": "integer", "nullable": false, "metadata": {"description": "Target partition index"}},
+                            {"name": "status", "type": "string", "nullable": false, "metadata": {"description": "Qualification status"}},
+                            {"name": "client_timestamp_us", "type": "long", "nullable": false, "metadata": {"description": "Client microsecond timestamp"}},
+                            {"name": "timestamp_utc", "type": "timestamp", "nullable": false, "metadata": {"description": "Lakehouse commit timestamp"}},
+                        ]
+                    }),
+                    vec!["run_id"],
                     serde_json::json!({
                         "delta.appendOnly": "true",
                         "delta.autoOptimize.autoCompact": "true",
@@ -725,8 +816,9 @@ mod tests {
 
     #[test]
     fn test_pipeline_spec_invariants() {
-        assert_eq!(PIPELINES.len(), 2);
+        assert_eq!(PIPELINES.len(), 3);
         assert_eq!(STREAMING_TOPICS.len(), 2);
-        assert_eq!(CONSUMER_GROUPS.len(), 3);
+        assert_eq!(BENCHMARK_TOPICS.len(), 1);
+        assert_eq!(CONSUMER_GROUPS.len(), 4);
     }
 }

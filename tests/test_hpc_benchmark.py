@@ -114,6 +114,41 @@ class TestPipelineSQLValidity(unittest.TestCase):
         self.assertIn("/data/delta/hpc_benchmarks", content)
 
 
+class TestEndpointConfigurationAndReplayProfile(unittest.TestCase):
+    def test_runner_reports_endpoints_and_replayer_command(self):
+        runner = HPCBenchmarkRunner(
+            run_id="run-endpoints",
+            total_records=25,
+            rate_msg_sec=50,
+            sink="iggy",
+            sink_url="127.0.0.1:9092",
+            iggy_url="http://127.0.0.1:3000",
+            arroyo_url="http://127.0.0.1:5115",
+            query_url="http://127.0.0.1:8085",
+        )
+        res = runner.run_synthetic_benchmark()
+        self.assertEqual(res["endpoints"]["sink"], "iggy")
+        self.assertEqual(res["endpoints"]["sink_url"], "127.0.0.1:9092")
+        self.assertEqual(res["endpoints"]["iggy_url"], "http://127.0.0.1:3000")
+        self.assertEqual(res["endpoints"]["arroyo_url"], "http://127.0.0.1:5115")
+        self.assertEqual(res["endpoints"]["query_url"], "http://127.0.0.1:8085")
+        self.assertIn("stream-replay-rs --config benchmark/replay-profile.toml", res["replayer_command"])
+        report = format_report(res)
+        self.assertIn("127.0.0.1:9092", report)
+        self.assertIn("http://127.0.0.1:3000", report)
+        self.assertIn("http://127.0.0.1:5115", report)
+        self.assertIn("http://127.0.0.1:8085", report)
+
+    def test_replay_profile_toml_exists(self):
+        profile = REPO_ROOT / "benchmark" / "replay-profile.toml"
+        self.assertTrue(profile.is_file(), "benchmark/replay-profile.toml must exist")
+        text = profile.read_text(encoding="utf-8")
+        self.assertIn('input_path = "./hpc_workload.jsonl"', text)
+        self.assertIn('timestamp_column = "client_timestamp_us"', text)
+        self.assertIn('default_url = "127.0.0.1:9092"', text)
+        self.assertIn('destination = "benchmark.hpc_mqbench"', text)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -68,6 +68,22 @@ class SubmoduleStandardsUnitTests(unittest.TestCase):
         self.assertIn("trivy", ps1_content)
         self.assertIn("HIGH,CRITICAL", ps1_content)
 
+    def test_04_hpc_benchmark_and_stream_replay_documentation(self):
+        """Verifies README.md and benchmark/README.md document HPC benchmark dataset reading, stream-replay-rs, and server endpoints (Epic 15)."""
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        bench_readme = (REPO_ROOT / "benchmark" / "README.md").read_text(encoding="utf-8")
+
+        for doc in (readme, bench_readme):
+            self.assertIn("Server Endpoint Discovery & Configuration", doc)
+            self.assertIn("benchmark/replay-profile.toml", doc)
+            self.assertIn("stream-replay-rs --config benchmark/replay-profile.toml", doc)
+            self.assertIn("cargo run --bin workload-generator", doc)
+            self.assertIn("cargo run --bin run-hpc-benchmark", doc)
+            self.assertIn("--sink-url", doc)
+            self.assertIn("--iggy-url", doc)
+            self.assertIn("--arroyo-url", doc)
+            self.assertIn("--query-url", doc)
+
 
 if __name__ == "__main__":
     unittest.main()

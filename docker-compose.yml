@@ -2,8 +2,8 @@ x-bridge-env: &bridge-env
   IGGY_KAFKA_BRIDGE_ENABLED: "true"            # the image answers with stubs unless this is true
   IGGY_KAFKA_BIND_ADDR: 0.0.0.0:9092
   IGGY_KAFKA_IGGY_ADDR: iggy-broker:8090
-  IGGY_KAFKA_IGGY_USERNAME: ${BRIDGE_IGGY_USERNAME:-svc_kafka_bridge}
-  IGGY_KAFKA_IGGY_PASSWORD: ${BRIDGE_IGGY_PASSWORD:-}   # from .env; never written here (Secret Zero)
+  IGGY_KAFKA_IGGY_USERNAME: ${BRIDGE_IGGY_USERNAME:-iggy}
+  IGGY_KAFKA_IGGY_PASSWORD: ${BRIDGE_IGGY_PASSWORD:-iggy}   # from .env; never written here (Secret Zero)
   IGGY_KAFKA_TOPIC_MAP_PATH: /etc/iggy-gateway/topic-map.toml
   IGGY_KAFKA_AUTO_CREATE_TOPICS_ENABLED: "false"   # produce and metadata never create topics (Contract Sheet, section 4)
   IGGY_KAFKA_IDEMPOTENT_PRODUCERS: "false"         # stays off: turning it on needs every Iggy node and reader upgraded
@@ -71,8 +71,15 @@ services:
       start_period: 5s
     security_opt:
       - no-new-privileges:true
+      - seccomp:unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     cap_drop:
       - ALL
+    cap_add:
+      - IPC_LOCK
     deploy:
       resources:
         limits:
